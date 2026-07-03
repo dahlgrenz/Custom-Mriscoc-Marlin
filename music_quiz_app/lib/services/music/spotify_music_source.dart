@@ -71,10 +71,11 @@ class SpotifyMusicSource implements MusicSource {
   Future<List<Track>> fetchPlaylistTracks(String playlistId) async {
     final token = await auth.ensureConnected();
 
-    final tracks = <Track>[];
+    // (Track, artistId) — artist-id:t används för att hämta genrer efteråt.
+    final parsed = <(Track, String?)>[];
     var url = Uri.parse(
       '$_apiBase/playlists/$playlistId/tracks'
-      '?fields=next,items(track(id,uri,name,artists(name),album(release_date,images)))'
+      '?fields=next,items(track(id,uri,name,popularity,artists(id,name),album(release_date,images)))'
       '&limit=100',
     );
 
@@ -99,8 +100,8 @@ class SpotifyMusicSource implements MusicSource {
         for (final item in (body['items'] as List)) {
           final t = item['track'];
           if (t == null) continue;
-          final track = _trackFromJson(Map<String, dynamic>.from(t as Map));
-          if (track != null) tracks.add(track);
+          final p = _parseTrack(Map<String, dynamic>.from(t as Map));
+          if (p != null) parsed.add(p);
         }
         final next = body['next'];
         if (next == null) break;
@@ -112,14 +113,26 @@ class SpotifyMusicSource implements MusicSource {
       throw AppException.from(e);
     }
 
-    if (tracks.isEmpty) {
+    if (parsed.isEmpty) {
       throw const AppException(
           'Spellistan innehåller inga spelbara låtar med årtal.');
     }
-    return tracks;
+
+    // Berika med genrer (best effort — filtret klarar sig utan om det misslyckas).
+    final genresByArtist = await _fetchArtistGenres(
+      token,
+      parsed.map((p) => p.$2).whereType<String>().toSet(),
+    );
+
+    return [
+      for (final (track, artistId) in parsed)
+        (artistId != null && genresByArtist.containsKey(artistId))
+            ? track.copyWith(genres: genresByArtist[artistId])
+            : track,
+    ];
   }
 
-  Track? _trackFromJson(Map<String, dynamic> t) {
+  (Track, String?)? _parseTrack(Map<String, dynamic> t) {
     final album = t['album'] as Map?;
     final releaseDate =
         album?['release_date'] as String?; // "1975", "1975-11" el. "1975-11-21"
@@ -129,15 +142,47 @@ class SpotifyMusicSource implements MusicSource {
 
     final artists = (t['artists'] as List?) ?? [];
     final images = (album?['images'] as List?) ?? [];
+    final firstArtist = artists.isEmpty ? null : artists.first as Map;
 
-    return Track(
+    final track = Track(
       id: t['id'] as String,
       uri: t['uri'] as String,
       title: t['name'] as String,
-      artist: artists.isEmpty ? 'Okänd' : (artists.first['name'] as String),
+      artist: firstArtist == null ? 'Okänd' : (firstArtist['name'] as String),
       year: year,
       albumArtUrl: images.isEmpty ? null : images.first['url'] as String?,
+      popularity: (t['popularity'] as num?)?.toInt() ?? 0,
     );
+    return (track, firstArtist?['id'] as String?);
+  }
+
+  /// Hämtar genrer per artist-id via /artists (batchar 50 åt gången).
+  /// Genrer är valfria: vid fel returneras helt enkelt färre/inga.
+  Future<Map<String, List<String>>> _fetchArtistGenres(
+      String token, Set<String> ids) async {
+    final result = <String, List<String>>{};
+    final list = ids.toList();
+    try {
+      for (var i = 0; i < list.length; i += 50) {
+        final end = (i + 50 > list.length) ? list.length : i + 50;
+        final chunk = list.sublist(i, end);
+        final res = await http.get(
+          Uri.parse('$_apiBase/artists?ids=${chunk.join(",")}'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (res.statusCode != 200) continue;
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        for (final a in (body['artists'] as List? ?? [])) {
+          if (a == null) continue;
+          final m = Map<String, dynamic>.from(a as Map);
+          result[m['id'] as String] =
+              (m['genres'] as List?)?.map((g) => '$g').toList() ?? [];
+        }
+      }
+    } catch (_) {
+      // Genrer är valfria — ignorera fel.
+    }
+    return result;
   }
 
   @override

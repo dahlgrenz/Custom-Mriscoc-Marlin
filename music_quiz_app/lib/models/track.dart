@@ -11,6 +11,16 @@ class Track {
 
   final String? albumArtUrl;
 
+  /// Genrer (från Spotify-artisten) — används för filter.
+  final List<String> genres;
+
+  /// Spotify-popularitet 0–100 — används för "bara hits"-filter.
+  final int popularity;
+
+  /// Kuraterade taggar (från tag_data/*.csv), t.ex. "melodifestivalen",
+  /// "land=se", "placering=1". Tomt om ingen matchning finns.
+  final List<String> tags;
+
   const Track({
     required this.id,
     required this.uri,
@@ -18,7 +28,26 @@ class Track {
     required this.artist,
     required this.year,
     this.albumArtUrl,
+    this.genres = const [],
+    this.popularity = 0,
+    this.tags = const [],
   });
+
+  Track copyWith({List<String>? genres, int? popularity, List<String>? tags}) =>
+      Track(
+        id: id,
+        uri: uri,
+        title: title,
+        artist: artist,
+        year: year,
+        albumArtUrl: albumArtUrl,
+        genres: genres ?? this.genres,
+        popularity: popularity ?? this.popularity,
+        tags: tags ?? this.tags,
+      );
+
+  /// Startåret för låtens årtionde, t.ex. 1994 → 1990.
+  int get decade => year - (year % 10);
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -27,6 +56,9 @@ class Track {
         'artist': artist,
         'year': year,
         'albumArtUrl': albumArtUrl,
+        if (genres.isNotEmpty) 'genres': genres,
+        if (popularity > 0) 'popularity': popularity,
+        if (tags.isNotEmpty) 'tags': tags,
       };
 
   factory Track.fromJson(Map<String, dynamic> json) => Track(
@@ -36,5 +68,13 @@ class Track {
         artist: json['artist'] as String,
         year: (json['year'] as num).toInt(),
         albumArtUrl: json['albumArtUrl'] as String?,
+        genres: _stringList(json['genres']),
+        popularity: (json['popularity'] as num?)?.toInt() ?? 0,
+        tags: _stringList(json['tags']),
       );
+
+  static List<String> _stringList(dynamic v) {
+    if (v is List) return [for (final e in v) '$e'];
+    return const [];
+  }
 }

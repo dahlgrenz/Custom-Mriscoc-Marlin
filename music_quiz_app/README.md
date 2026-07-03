@@ -166,6 +166,11 @@ cd music_quiz_app && firebase deploy --only hosting   # använder firebase.json 
   poängmål i stället för antal kort.
 - [x] Slumpat namn vid QR-anslutning: webbspelare får ett förifyllt, redigerbart
   namn direkt.
+- [x] Filter för att skapa varierade quiz (`game/track_filter.dart` +
+  `ui/screens/filter_screen.dart`): decennium, artist, genre och popularitet
+  direkt från Spotify, plus kuraterade taggar (Melodifestivalen, land,
+  placering) via `tag_data/*.csv` (`services/tag_repository.dart`). Live-räknare
+  "X av Y låtar matchar" i lobbyn.
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.
 
 ### Steal-mekaniken

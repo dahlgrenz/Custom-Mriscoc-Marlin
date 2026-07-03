@@ -43,3 +43,5 @@ flutter:
     # Webbklienten (statiska filer) som värdtelefonen serverar över LAN.
     # Se web_client/README.md.
     - web_client/
+    # Kuraterade taggfiler (Melodifestivalen, land, placering …). Se tag_data/.
+    - tag_data/

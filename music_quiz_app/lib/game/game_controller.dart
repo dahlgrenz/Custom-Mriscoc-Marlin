@@ -10,7 +10,9 @@ import '../models/track.dart';
 import '../services/multiplayer/game_repository.dart';
 import '../services/music/music_source.dart';
 import '../services/sound_service.dart';
+import '../services/tag_repository.dart';
 import 'scoring.dart';
+import 'track_filter.dart';
 
 /// Binder ihop musikkälla + multiplayer-repo + spellogik och exponerar ett
 /// observerbart speltillstånd för UI:t.
@@ -18,12 +20,14 @@ class GameController extends ChangeNotifier {
   final GameRepository repo;
   final MusicSource music;
   final SoundService sound;
+  final TagRepository tags;
   final String myPlayerId;
 
   GameController({
     required this.repo,
     required this.music,
     required this.sound,
+    required this.tags,
     required this.myPlayerId,
   });
 
@@ -58,6 +62,16 @@ class GameController extends ChangeNotifier {
 
   /// Leken (spellistan i slumpad ordning) — laddas från rummet vid spelstart.
   List<Track> _deck = [];
+
+  /// Alla låtar från spellistan (för filtret), och det valda filtret.
+  List<Track> _allTracks = [];
+  List<Track> get allTracks => _allTracks;
+  TrackFilter _filter = const TrackFilter();
+  TrackFilter get filter => _filter;
+  List<Track> get filteredTracks => _filter.apply(_allTracks);
+
+  bool _loadingTracks = false;
+  bool get loadingTracks => _loadingTracks;
 
   bool get isHost => _room?.hostId == myPlayerId;
   Player? get me => _room?.players[myPlayerId];
@@ -159,15 +173,46 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  /// Värden laddar spellistan och startar spelet.
+  /// Laddar spellistans låtar (med kuraterade taggar) för filtervyn. Idempotent.
+  Future<void> loadTracksForFilter(String playlistId) async {
+    if (_allTracks.isNotEmpty || _loadingTracks) return;
+    _loadingTracks = true;
+    notifyListeners();
+    try {
+      await tags.load();
+      final fetched = await music.fetchPlaylistTracks(playlistId);
+      _allTracks = tags.applyTo(fetched);
+    } catch (e) {
+      _setError(e);
+    } finally {
+      _loadingTracks = false;
+      notifyListeners();
+    }
+  }
+
+  void setFilter(TrackFilter f) {
+    _filter = f;
+    notifyListeners();
+  }
+
+  /// Värden startar spelet med det filtrerade urvalet.
   Future<void> hostStartGame(String playlistId) async {
     final room = _room;
     if (room == null) return;
     _busy = true;
     notifyListeners();
     try {
-      final tracks = await music.fetchPlaylistTracks(playlistId);
-      _deck = List<Track>.from(tracks)..shuffle(Random.secure());
+      if (_allTracks.isEmpty) {
+        await tags.load();
+        _allTracks = tags.applyTo(await music.fetchPlaylistTracks(playlistId));
+      }
+      final filtered = _filter.apply(_allTracks);
+      final minNeeded = room.players.length + 1;
+      if (filtered.length < minNeeded || filtered.length < 4) {
+        throw AppException(
+            'För få låtar matchar filtret (${filtered.length}). Lätta på filtret.');
+      }
+      _deck = List<Track>.from(filtered)..shuffle(Random.secure());
       await repo.startGame(
         code: room.code,
         playerIds: room.players.keys.toList(),

@@ -8,6 +8,7 @@ import '../../services/multiplayer/game_repository.dart';
 import '../../models/playlist_info.dart';
 import '../../services/music/music_source.dart';
 import '../../services/sound_service.dart';
+import '../../services/tag_repository.dart';
 import 'lobby_screen.dart';
 import 'playlist_picker_screen.dart';
 
@@ -84,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
       repo: context.read<GameRepository>(),
       music: context.read<MusicSource>(),
       sound: context.read<SoundService>(),
+      tags: context.read<TagRepository>(),
       myPlayerId: _myId,
     )..bindRoom(code);
     Navigator.of(context).push(MaterialPageRoute(

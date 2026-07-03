@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../game/game_controller.dart';
 import '../../models/game_room.dart';
 import '../../services/lan_server_service.dart';
+import 'filter_screen.dart';
 import 'game_screen.dart';
 
 /// Vart QR-koden pekar: LAN (samma Wi-Fi) eller en publik Firebase Hosting-URL.
@@ -200,6 +201,31 @@ class _LobbyScreenState extends State<LobbyScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            // Filter (värden): begränsa vilka låtar som ingår.
+            if (controller.isHost) ...[
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => ChangeNotifierProvider<GameController>.value(
+                    value: controller,
+                    child: FilterScreen(playlistId: room.playlistId),
+                  ),
+                )),
+                icon: const Icon(Icons.filter_list),
+                label: Text(controller.filter.isActive
+                    ? 'Ändra filter'
+                    : 'Filter (alla låtar)'),
+              ),
+              if (controller.filter.isActive)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(controller.filter.summary,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ),
+              const SizedBox(height: 12),
+            ],
             if (controller.isHost)
               FilledButton.icon(
                 onPressed: (players.length < 2 || controller.busy)
