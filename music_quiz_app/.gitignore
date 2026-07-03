@@ -1,0 +1,23 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# Hemligheter
+.env
+
+# Firebase-genererad konfiguration (generera lokalt via flutterfire configure)
+lib/firebase_options.dart
+google-services.json
+GoogleService-Info.plist
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
