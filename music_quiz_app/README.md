@@ -108,7 +108,9 @@ lib/
 
 ## Roadmap
 - [x] Fas 1: Projektstruktur, modeller, Firebase-rum, spellogik, kärnskärmar.
-- [ ] Fas 2: Skarp Spotify-auth + uppspelning på enhet, felhantering.
+- [x] Fas 2: Robust Spotify-auth (anslutningstillstånd, token-förnyelse,
+  återanslutning), uppspelning med play/paus, och genomgående felhantering
+  med användarvänliga meddelanden (`core/app_exception.dart`).
 - [ ] Fas 3: Full realtids-UI (tidslinje-drag & drop, live-poäng, återanslutning).
 - [ ] Fas 4: "Steal"/utmaning, spellistval, avatarer, ljud/animationer.
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.

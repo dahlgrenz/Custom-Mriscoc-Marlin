@@ -18,7 +18,8 @@ class MusicQuizApp extends StatelessWidget {
     final auth = SpotifyAuthService();
     return MultiProvider(
       providers: [
-        Provider<SpotifyAuthService>.value(value: auth),
+        // ChangeNotifier så UI:t kan lyssna på anslutnings-/felstatus.
+        ChangeNotifierProvider<SpotifyAuthService>.value(value: auth),
         Provider<GameRepository>(create: (_) => GameRepository()),
         Provider<MusicSource>(create: (_) => SpotifyMusicSource(auth)),
       ],

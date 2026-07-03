@@ -23,7 +23,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _defaultPlaylist = '37i9dQZEVXbMDoHDwVN2tF';
 
   bool _busy = false;
-  bool _spotifyConnected = false;
 
   @override
   void dispose() {
@@ -36,11 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _connectSpotify() async {
     final auth = context.read<SpotifyAuthService>();
-    await _run(() async {
-      final ok = await auth.connect();
-      setState(() => _spotifyConnected = ok);
-      if (!ok) _toast('Kunde inte ansluta till Spotify.');
-    });
+    await _run(() => auth.connect());
   }
 
   Future<void> _createRoom() async {
@@ -90,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _toast('Skriv ditt namn först.');
       return false;
     }
-    if (!_spotifyConnected) {
+    if (!context.read<SpotifyAuthService>().isConnected) {
       _toast('Anslut till Spotify först.');
       return false;
     }
@@ -110,12 +105,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<SpotifyAuthService>();
+    final connected = auth.state == SpotifyConnectionState.connected;
+    final connecting = auth.state == SpotifyConnectionState.connecting;
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -142,10 +140,30 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
-                onPressed: _busy ? null : _connectSpotify,
-                icon: Icon(_spotifyConnected ? Icons.check_circle : Icons.music_note),
-                label: Text(_spotifyConnected ? 'Spotify anslutet' : 'Anslut Spotify'),
+                onPressed: (_busy || connecting || connected)
+                    ? null
+                    : _connectSpotify,
+                icon: connecting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(connected ? Icons.check_circle : Icons.music_note),
+                label: Text(connected
+                    ? 'Spotify anslutet'
+                    : connecting
+                        ? 'Ansluter…'
+                        : 'Anslut Spotify'),
               ),
+              if (auth.state == SpotifyConnectionState.error &&
+                  auth.lastError != null) ...[
+                const SizedBox(height: 8),
+                Text(auth.lastError!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                        fontSize: 13)),
+              ],
               const SizedBox(height: 32),
               FilledButton(
                 onPressed: _busy ? null : _createRoom,

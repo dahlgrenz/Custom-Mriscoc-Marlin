@@ -14,6 +14,16 @@ class LobbyScreen extends StatelessWidget {
     final controller = context.watch<GameController>();
     final room = controller.room;
 
+    // Visa fel (t.ex. misslyckad spelstart) och rensa dem sedan.
+    final error = controller.lastError;
+    if (error != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
+        controller.clearError();
+      });
+    }
+
     // Navigera till spelet så fort värden startar.
     if (room?.status == RoomStatus.playing) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,13 +81,20 @@ class LobbyScreen extends StatelessWidget {
             ),
             if (controller.isHost)
               FilledButton.icon(
-                onPressed: players.length < 2
+                onPressed: (players.length < 2 || controller.busy)
                     ? null
-                    : () => _start(context, controller, room),
-                icon: const Icon(Icons.play_arrow),
-                label: Text(players.length < 2
-                    ? 'Vänta på fler spelare…'
-                    : 'Starta spelet'),
+                    : () => controller.hostStartGame(room.playlistId),
+                icon: controller.busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.play_arrow),
+                label: Text(controller.busy
+                    ? 'Laddar spellista…'
+                    : players.length < 2
+                        ? 'Vänta på fler spelare…'
+                        : 'Starta spelet'),
               )
             else
               const Center(child: Text('Väntar på att värden startar…')),
@@ -85,15 +102,5 @@ class LobbyScreen extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _start(
-      BuildContext context, GameController controller, GameRoom room) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await controller.hostStartGame(room.playlistId);
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Kunde inte starta: $e')));
-    }
   }
 }

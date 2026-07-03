@@ -27,6 +27,16 @@ class GameScreen extends StatelessWidget {
     final round = room.currentRound;
     final activeName = room.players[round?.activePlayerId]?.name ?? '–';
 
+    // Visa eventuella fel som en SnackBar och rensa dem sedan.
+    final error = controller.lastError;
+    if (error != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error)));
+        controller.clearError();
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Först till ${room.targetCards} kort'),
@@ -38,7 +48,8 @@ class GameScreen extends StatelessWidget {
             track: round?.track,
             myTurn: controller.isMyTurn,
             activeName: activeName,
-            onReplay: controller.replayCurrent,
+            isPaused: controller.isPaused,
+            onToggle: controller.togglePlayback,
           ),
           const Divider(height: 1),
           Expanded(
@@ -60,13 +71,15 @@ class _NowPlaying extends StatelessWidget {
   final Track? track;
   final bool myTurn;
   final String activeName;
-  final VoidCallback onReplay;
+  final bool isPaused;
+  final VoidCallback onToggle;
 
   const _NowPlaying({
     required this.track,
     required this.myTurn,
     required this.activeName,
-    required this.onReplay,
+    required this.isPaused,
+    required this.onToggle,
   });
 
   @override
@@ -89,11 +102,11 @@ class _NowPlaying extends StatelessWidget {
           Text(track?.artist ?? '',
               style: Theme.of(context).textTheme.bodyMedium),
           if (myTurn) ...[
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: onReplay,
-              icon: const Icon(Icons.replay),
-              label: const Text('Spela igen'),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: onToggle,
+              icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
+              label: Text(isPaused ? 'Spela' : 'Pausa'),
             ),
           ],
         ],
