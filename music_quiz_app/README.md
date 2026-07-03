@@ -82,8 +82,9 @@ lib/
 │   │   └── spotify_music_source.dart  Spotify-implementation (Web API + SDK)
 │   ├── auth/
 │   │   └── spotify_auth_service.dart  OAuth/PKCE + SDK-anslutning
-│   └── multiplayer/
-│       └── game_repository.dart       Firebase Realtime DB: rum, turer, poäng
+│   ├── multiplayer/
+│   │   └── game_repository.dart       Firebase Realtime DB: rum, turer, poäng
+│   └── sound_service.dart             Ljud/haptik vid rätt/fel/stöld
 ├── game/
 │   ├── scoring.dart              Ren spellogik: är placeringen rätt?
 │   └── game_controller.dart      Speltillstånd (ChangeNotifier) som binder ihop allt
@@ -117,6 +118,14 @@ lib/
   i lobbyn.
 - [x] Fas 3: Realtids-UI — dra-och-släpp av låten till rätt plats i tidslinjen,
   animerade kort och poäng, samt offline-banner med automatisk återanslutning.
-- [ ] Fas 4: "Steal"/utmaning (andra spelare kan kontra en placering), val av
-  mål-antal kort, avatarer, ljudeffekter.
+- [x] Fas 4: "Steal" (gissar den aktiva spelaren fel får nästa spelare stjäla
+  kortet), val av mål-antal kort i lobbyn, emoji-avatarer per spelare, och
+  ljud-/haptic-återkoppling vid rätt/fel/stöld (`services/sound_service.dart`).
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.
+
+### Steal-mekaniken
+Den aktiva spelaren gissar var låten hör hemma. Blir det **rätt** behåller hen
+kortet och turen går vidare. Blir det **fel** går rundan in i steal-fasen: nästa
+spelare får en chans att placera samma låt i sin egen tidslinje och stjäla kortet.
+Rundans fas (`guessing`/`stealing`) och vem som får stjäla lever i rummet, så alla
+klienter är överens om läget.

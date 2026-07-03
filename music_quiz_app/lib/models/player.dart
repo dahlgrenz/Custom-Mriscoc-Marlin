@@ -5,12 +5,16 @@ import 'track.dart';
 class Player {
   final String id;
   final String name;
+
+  /// Emoji-avatar som representerar spelaren i UI:t.
+  final String avatar;
   final int score;
   final List<Track> timeline;
 
   const Player({
     required this.id,
     required this.name,
+    this.avatar = '🎧',
     this.score = 0,
     this.timeline = const [],
   });
@@ -18,6 +22,7 @@ class Player {
   Player copyWith({int? score, List<Track>? timeline}) => Player(
         id: id,
         name: name,
+        avatar: avatar,
         score: score ?? this.score,
         timeline: timeline ?? this.timeline,
       );
@@ -25,6 +30,7 @@ class Player {
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
+        'avatar': avatar,
         'score': score,
         // Firebase gillar map framför list; nyckla på index för stabil ordning.
         'timeline': {
@@ -45,6 +51,7 @@ class Player {
     return Player(
       id: json['id'] as String,
       name: json['name'] as String,
+      avatar: json['avatar'] as String? ?? '🎧',
       score: (json['score'] as num?)?.toInt() ?? 0,
       timeline: tracks,
     );

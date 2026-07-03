@@ -25,15 +25,21 @@ class GameScreen extends StatelessWidget {
 
     final me = controller.me;
     final round = room.currentRound;
-    final activeName = room.players[round?.activePlayerId]?.name ?? '–';
 
-    // Visa eventuella fel som en SnackBar och rensa dem sedan.
+    // Visa fel och resultat-återkoppling som SnackBars och rensa dem sedan.
     final error = controller.lastError;
     if (error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error)));
         controller.clearError();
+      });
+    }
+    final result = controller.lastResult;
+    if (result != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showResult(context, result);
+        controller.clearResult();
       });
     }
 
@@ -47,8 +53,9 @@ class GameScreen extends StatelessWidget {
           _OfflineBanner(visible: !controller.isOnline),
           _NowPlaying(
             track: round?.track,
-            myTurn: controller.isMyTurn,
-            activeName: activeName,
+            canAct: controller.canAct,
+            isStealPhase: controller.isStealPhase,
+            actorName: controller.actorName,
             isPaused: controller.isPaused,
             onToggle: controller.togglePlayback,
           ),
@@ -58,13 +65,29 @@ class GameScreen extends StatelessWidget {
                 ? const Center(child: Text('Laddar din tidslinje…'))
                 : _Timeline(
                     player: me,
-                    canPlace: controller.isMyTurn,
+                    canPlace: controller.canAct,
                     currentTrack: round?.track,
                     onPlace: (pos) => controller.placeCurrentTrack(pos),
                   ),
           ),
         ],
       ),
+    );
+  }
+
+  void _showResult(BuildContext context, PlacementResult result) {
+    final scheme = Theme.of(context).colorScheme;
+    final (String msg, Color color) = switch (result) {
+      PlacementResult.correct => ('Rätt! Kortet är ditt 🎉', Colors.green.shade700),
+      PlacementResult.stolen => ('Stöld! Du snodde kortet 😎', Colors.green.shade700),
+      PlacementResult.wrong => (
+          'Fel plats! Nästa spelare får chansen att stjäla.',
+          scheme.error
+        ),
+      PlacementResult.missed => ('Missade stölden — kortet försvinner.', scheme.error),
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color),
     );
   }
 }
@@ -102,29 +125,40 @@ class _OfflineBanner extends StatelessWidget {
 
 class _NowPlaying extends StatelessWidget {
   final Track? track;
-  final bool myTurn;
-  final String activeName;
+  final bool canAct;
+  final bool isStealPhase;
+  final String actorName;
   final bool isPaused;
   final VoidCallback onToggle;
 
   const _NowPlaying({
     required this.track,
-    required this.myTurn,
-    required this.activeName,
+    required this.canAct,
+    required this.isStealPhase,
+    required this.actorName,
     required this.isPaused,
     required this.onToggle,
   });
+
+  String get _header {
+    if (canAct && isStealPhase) return 'STEAL! 😎 Dra låten rätt och stjäl kortet';
+    if (canAct) return 'Din tur — dra låten till rätt plats i tiden';
+    if (isStealPhase) return '$actorName försöker stjäla kortet…';
+    return '$actorName spelar';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       width: double.infinity,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: isStealPhase
+          ? Theme.of(context).colorScheme.tertiaryContainer
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Column(
         children: [
           Text(
-            myTurn ? 'Din tur — dra låten till rätt plats i tiden' : '$activeName spelar',
+            _header,
             style: Theme.of(context).textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
@@ -137,10 +171,10 @@ class _NowPlaying extends StatelessWidget {
             child: _MysteryCard(
               key: ValueKey(track?.id ?? 'none'),
               track: track,
-              draggable: myTurn,
+              draggable: canAct,
             ),
           ),
-          if (myTurn) ...[
+          if (canAct) ...[
             const SizedBox(height: 12),
             FilledButton.tonalIcon(
               onPressed: onToggle,
@@ -321,8 +355,8 @@ class _ScoreSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = room.players.values
-        .map((p) => '${p.name}: ${p.timeline.length}')
-        .join('  •  ');
+        .map((p) => '${p.avatar} ${p.timeline.length}')
+        .join('   ');
     return Center(
       child: Padding(
         padding: const EdgeInsets.only(right: 16),

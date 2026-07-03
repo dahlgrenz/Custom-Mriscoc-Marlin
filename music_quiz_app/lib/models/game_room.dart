@@ -3,29 +3,45 @@ import 'track.dart';
 
 enum RoomStatus { lobby, playing, finished }
 
+/// Rundans fas: den aktiva spelaren gissar först; om hen har fel får en
+/// utmanare (nästa spelare) chansen att stjäla kortet.
+enum RoundPhase { guessing, stealing }
+
 /// Den nuvarande rundan: vilken låt som spelas och vems tur det är.
-/// [track.year] hålls dolt i UI:t tills [revealed] blir true.
 class GameRound {
   final Track track;
   final String activePlayerId;
-  final bool revealed;
+  final RoundPhase phase;
+
+  /// Vem som får stjäla när [phase] är [RoundPhase.stealing] (annars null).
+  final String? stealerId;
 
   const GameRound({
     required this.track,
     required this.activePlayerId,
-    this.revealed = false,
+    this.phase = RoundPhase.guessing,
+    this.stealerId,
   });
+
+  /// Vem som får agera just nu (gissaren eller utmanaren).
+  String get actorId =>
+      phase == RoundPhase.stealing ? (stealerId ?? activePlayerId) : activePlayerId;
 
   Map<String, dynamic> toJson() => {
         'track': track.toJson(),
         'activePlayerId': activePlayerId,
-        'revealed': revealed,
+        'phase': phase.name,
+        'stealerId': stealerId,
       };
 
   factory GameRound.fromJson(Map<String, dynamic> json) => GameRound(
         track: Track.fromJson(Map<String, dynamic>.from(json['track'] as Map)),
         activePlayerId: json['activePlayerId'] as String,
-        revealed: json['revealed'] as bool? ?? false,
+        phase: RoundPhase.values.firstWhere(
+          (p) => p.name == json['phase'],
+          orElse: () => RoundPhase.guessing,
+        ),
+        stealerId: json['stealerId'] as String?,
       );
 }
 

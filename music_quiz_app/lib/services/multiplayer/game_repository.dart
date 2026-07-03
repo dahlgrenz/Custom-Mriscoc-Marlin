@@ -26,6 +26,7 @@ class GameRepository {
   Future<String> createRoom({
     required String hostId,
     required String hostName,
+    String hostAvatar = '🎧',
     required String playlistId,
     String playlistName = '',
     int targetCards = 10,
@@ -44,7 +45,7 @@ class GameRepository {
       playlistId: playlistId,
       playlistName: playlistName,
       players: {
-        hostId: Player(id: hostId, name: hostName),
+        hostId: Player(id: hostId, name: hostName, avatar: hostAvatar),
       },
     );
     await _room(code).set(room.toJson());
@@ -56,6 +57,7 @@ class GameRepository {
     required String code,
     required String playerId,
     required String playerName,
+    String playerAvatar = '🎧',
   }) async {
     final snapshot = await _room(code).get();
     if (!snapshot.exists) {
@@ -68,8 +70,23 @@ class GameRepository {
     }
     await _room(code)
         .child('players/$playerId')
-        .set(Player(id: playerId, name: playerName).toJson());
+        .set(Player(id: playerId, name: playerName, avatar: playerAvatar)
+            .toJson());
   }
+
+  /// Värden justerar mål-antal kort i lobbyn (synkas till alla).
+  Future<void> updateTargetCards({
+    required String code,
+    required int target,
+  }) =>
+      _room(code).child('targetCards').set(target);
+
+  /// Skriver om enbart den nuvarande rundan (används vid steal-övergången).
+  Future<void> updateRound({
+    required String code,
+    required GameRound round,
+  }) =>
+      _room(code).child('currentRound').set(round.toJson());
 
   /// True/false-ström för om klienten är ansluten till Firebase (för
   /// offline-banner och återanslutning). Firebase återansluter automatiskt.

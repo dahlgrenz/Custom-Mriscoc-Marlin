@@ -7,6 +7,7 @@ import '../../services/auth/spotify_auth_service.dart';
 import '../../services/multiplayer/game_repository.dart';
 import '../../models/playlist_info.dart';
 import '../../services/music/music_source.dart';
+import '../../services/sound_service.dart';
 import 'lobby_screen.dart';
 import 'playlist_picker_screen.dart';
 
@@ -20,6 +21,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _nameController = TextEditingController();
   final _codeController = TextEditingController();
+
+  static const _avatars = ['🎧', '🎸', '🎤', '🥁', '🎹', '🎺', '🎷', '🎻'];
+  String _avatar = _avatars.first;
 
   bool _busy = false;
 
@@ -51,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final code = await repo.createRoom(
         hostId: _myId,
         hostName: _nameController.text.trim(),
+        hostAvatar: _avatar,
         playlistId: playlist.id,
         playlistName: playlist.name,
       );
@@ -68,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
         code: code,
         playerId: _myId,
         playerName: _nameController.text.trim(),
+        playerAvatar: _avatar,
       );
       _openLobby(code);
     });
@@ -77,6 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final controller = GameController(
       repo: context.read<GameRepository>(),
       music: context.read<MusicSource>(),
+      sound: context.read<SoundService>(),
       myPlayerId: _myId,
     )..bindRoom(code);
     Navigator.of(context).push(MaterialPageRoute(
@@ -144,6 +151,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   labelText: 'Ditt namn',
                   border: OutlineInputBorder(),
                 ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Välj avatar',
+                    style: Theme.of(context).textTheme.labelLarge),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final a in _avatars)
+                    GestureDetector(
+                      onTap: () => setState(() => _avatar = a),
+                      child: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: a == _avatar
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.surfaceContainerHighest,
+                        child: Text(a, style: const TextStyle(fontSize: 22)),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(

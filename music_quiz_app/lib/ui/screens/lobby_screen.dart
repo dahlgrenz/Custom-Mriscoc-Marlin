@@ -81,7 +81,9 @@ class LobbyScreen extends StatelessWidget {
                   final p = players[i];
                   final isHost = p.id == room.hostId;
                   return ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person)),
+                    leading: CircleAvatar(
+                      child: Text(p.avatar, style: const TextStyle(fontSize: 20)),
+                    ),
                     title: Text(p.name),
                     trailing: isHost
                         ? const Chip(label: Text('Värd'))
@@ -90,6 +92,29 @@ class LobbyScreen extends StatelessWidget {
                 },
               ),
             ),
+            // Mål-antal kort: värden väljer, övriga ser valet.
+            Row(
+              children: [
+                const Icon(Icons.flag, size: 18),
+                const SizedBox(width: 8),
+                Text('Mål:', style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(width: 12),
+                if (controller.isHost)
+                  ...[for (final n in const [5, 10, 15])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text('$n'),
+                        selected: room.targetCards == n,
+                        onSelected: (_) => controller.setTargetCards(n),
+                      ),
+                    )]
+                else
+                  Text('${room.targetCards} kort',
+                      style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+            const SizedBox(height: 12),
             if (controller.isHost)
               FilledButton.icon(
                 onPressed: (players.length < 2 || controller.busy)
