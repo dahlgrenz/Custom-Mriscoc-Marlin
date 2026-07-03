@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'core/theme.dart';
 import 'services/auth/spotify_auth_service.dart';
+import 'services/lan_server_service.dart';
 import 'services/multiplayer/game_repository.dart';
 import 'services/music/music_source.dart';
 import 'services/music/spotify_music_source.dart';
@@ -24,6 +25,10 @@ class MusicQuizApp extends StatelessWidget {
         Provider<GameRepository>(create: (_) => GameRepository()),
         Provider<MusicSource>(create: (_) => SpotifyMusicSource(auth)),
         Provider<SoundService>(create: (_) => SoundService()),
+        Provider<LanServerService>(
+          create: (_) => LanServerService(),
+          dispose: (_, s) => s.stop(),
+        ),
       ],
       child: MaterialApp(
         title: 'Musikquiz',

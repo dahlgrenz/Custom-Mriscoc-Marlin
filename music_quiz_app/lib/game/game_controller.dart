@@ -129,9 +129,9 @@ class GameController extends ChangeNotifier {
     }, onError: (_) {});
   }
 
-  // Nyckel för det tillstånd vi senast auto-spelade, så vi inte startar om
-  // låten vid varje rum-uppdatering (t.ex. poängsynk).
-  String? _lastActionKey;
+  // Id på låten vi senast spelade, så vi inte startar om den vid varje
+  // rum-uppdatering (t.ex. poängsynk eller övergång till steal-fas).
+  String? _lastPlayedTrackId;
 
   Future<void> _onRoomUpdate(GameRoom? room) async {
     _room = room;
@@ -146,17 +146,15 @@ class GameController extends ChangeNotifier {
       }
     }
 
-    // Spela låten automatiskt när det blir min tur att agera (gissa eller stjäla).
+    // Värden är "jukebox": spelar rundans låt högt i rummet, oavsett vems tur
+    // det är. Andra klienter (t.ex. webbanslutna) behöver då inget eget ljud.
     final round = room.currentRound;
-    if (canAct && round != null) {
-      final key = '${round.track.id}|${round.phase.name}|${round.stealerId}';
-      if (key != _lastActionKey) {
-        _lastActionKey = key;
-        try {
-          await music.play(round.track);
-        } catch (e) {
-          _setError(e);
-        }
+    if (isHost && round != null && round.track.id != _lastPlayedTrackId) {
+      _lastPlayedTrackId = round.track.id;
+      try {
+        await music.play(round.track);
+      } catch (e) {
+        _setError(e);
       }
     }
   }
@@ -266,9 +264,9 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  /// Play/paus-knapp för den som agerar.
+  /// Play/paus-knapp för jukeboxen (värden styr rummets ljud).
   Future<void> togglePlayback() async {
-    if (!canAct) return;
+    if (!isHost) return;
     try {
       if (_isPaused) {
         await music.resume();

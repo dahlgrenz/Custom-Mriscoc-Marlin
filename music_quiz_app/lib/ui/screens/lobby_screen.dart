@@ -1,20 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../game/game_controller.dart';
 import '../../models/game_room.dart';
+import '../../services/lan_server_service.dart';
 import 'game_screen.dart';
 
-/// Väntrummet: visar rumskoden och anslutna spelare. Värden startar spelet.
-class LobbyScreen extends StatelessWidget {
+/// Väntrummet: visar rumskoden, en QR-kod att dela, och anslutna spelare.
+/// Värdens telefon startar en LAN-webbserver så andra kan gå med via webben.
+class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key});
+
+  @override
+  State<LobbyScreen> createState() => _LobbyScreenState();
+}
+
+class _LobbyScreenState extends State<LobbyScreen> {
+  bool _starting = false;
+  String? _serverUrl;
+  String? _serverError;
+
+  Future<void> _ensureServer() async {
+    if (_starting || _serverUrl != null) return;
+    _starting = true;
+    try {
+      final url = await context.read<LanServerService>().start();
+      if (mounted) setState(() => _serverUrl = url);
+    } catch (e) {
+      if (mounted) setState(() => _serverError = '$e');
+    } finally {
+      _starting = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<GameController>();
     final room = controller.room;
 
-    // Visa fel (t.ex. misslyckad spelstart) och rensa dem sedan.
+    // Värden startar LAN-servern så snart vi vet att vi är värd.
+    if (controller.isHost) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureServer());
+    }
+
     final error = controller.lastError;
     if (error != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -41,6 +71,8 @@ class LobbyScreen extends StatelessWidget {
     }
 
     final players = room.players.values.toList();
+    final joinUrl =
+        _serverUrl == null ? null : '$_serverUrl/?code=${room.code}';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Väntrum')),
@@ -56,10 +88,8 @@ class LobbyScreen extends StatelessWidget {
                       letterSpacing: 8,
                       fontWeight: FontWeight.bold,
                     )),
-            const SizedBox(height: 4),
-            const Text('Dela koden — kompisar går med från startskärmen.'),
             if (room.playlistName.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Row(children: [
                 const Icon(Icons.queue_music, size: 18),
                 const SizedBox(width: 8),
@@ -69,7 +99,9 @@ class LobbyScreen extends StatelessWidget {
                 ),
               ]),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            if (controller.isHost) _ShareCard(joinUrl: joinUrl, error: _serverError),
+            const SizedBox(height: 16),
             Text('Spelare (${players.length})',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -82,12 +114,12 @@ class LobbyScreen extends StatelessWidget {
                   final isHost = p.id == room.hostId;
                   return ListTile(
                     leading: CircleAvatar(
-                      child: Text(p.avatar, style: const TextStyle(fontSize: 20)),
+                      child:
+                          Text(p.avatar, style: const TextStyle(fontSize: 20)),
                     ),
                     title: Text(p.name),
-                    trailing: isHost
-                        ? const Chip(label: Text('Värd'))
-                        : null,
+                    trailing:
+                        isHost ? const Chip(label: Text('Värd')) : null,
                   );
                 },
               ),
@@ -100,15 +132,17 @@ class LobbyScreen extends StatelessWidget {
                 Text('Mål:', style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(width: 12),
                 if (controller.isHost)
-                  ...[for (final n in const [5, 10, 15])
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text('$n'),
-                        selected: room.targetCards == n,
-                        onSelected: (_) => controller.setTargetCards(n),
-                      ),
-                    )]
+                  ...[
+                    for (final n in const [5, 10, 15])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text('$n'),
+                          selected: room.targetCards == n,
+                          onSelected: (_) => controller.setTargetCards(n),
+                        ),
+                      )
+                  ]
                 else
                   Text('${room.targetCards} kort',
                       style: Theme.of(context).textTheme.bodyMedium),
@@ -134,6 +168,67 @@ class LobbyScreen extends StatelessWidget {
               )
             else
               const Center(child: Text('Väntar på att värden startar…')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Kort som visar QR-koden (och en dela-knapp) till LAN-webbklienten.
+class _ShareCard extends StatelessWidget {
+  final String? joinUrl;
+  final String? error;
+  const _ShareCard({required this.joinUrl, required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text('Låt andra gå med',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            const Text(
+              'Skanna QR-koden med en telefon eller dator på samma Wi-Fi.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            if (error != null)
+              Text(error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error))
+            else if (joinUrl == null)
+              const SizedBox(
+                  height: 150,
+                  child: Center(child: CircularProgressIndicator()))
+            else ...[
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: QrImageView(
+                  data: joinUrl!,
+                  version: QrVersions.auto,
+                  size: 150,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SelectableText(joinUrl!,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 4),
+              TextButton.icon(
+                onPressed: () => Share.share('Gå med i mitt musikquiz: $joinUrl'),
+                icon: const Icon(Icons.share),
+                label: const Text('Dela länk'),
+              ),
+            ],
           ],
         ),
       ),

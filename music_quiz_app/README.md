@@ -84,6 +84,7 @@ lib/
 │   │   └── spotify_auth_service.dart  OAuth/PKCE + SDK-anslutning
 │   ├── multiplayer/
 │   │   └── game_repository.dart       Firebase Realtime DB: rum, turer, poäng
+│   ├── lan_server_service.dart        LAN-webbserver som serverar web_client/
 │   └── sound_service.dart             Ljud/haptik vid rätt/fel/stöld
 ├── game/
 │   ├── scoring.dart              Ren spellogik: är placeringen rätt?
@@ -98,6 +99,24 @@ lib/
 - **Servern är sanningskällan.** Rummets tillstånd (turordning, poäng, tidslinjer) lever i
   Firebase; klienterna renderar det. Det gör realtidssynk och fusk-skydd enklare.
 - **Ren spellogik.** `scoring.dart` är rena funktioner utan beroenden — enkelt att testa.
+
+## Gå med via QR / webben (ingen app-installation)
+Värdens Android-telefon är "jukebox": den spelar musiken högt via Spotify och
+**startar en liten webbserver på det lokala nätverket**. I väntrummet visas en
+**QR-kod** som pekar på `http://<telefonens-ip>:8080/?code=ABCD`. Alla på samma
+Wi-Fi — iPhone, Android, dator — skannar den, öppnar webbklienten
+(`web_client/`) i webbläsaren och ansluter till samma spelrum via Firebase.
+
+- Webbspelare **hör musiken i rummet** (från värdens telefon) och placerar sina
+  gissningar i webbläsaren — de behöver inget eget Spotify.
+- Webbklientens spellogik speglar `lib/game/` och skriver till samma Firebase-DB.
+- Förutsättningar/begränsningar (internet krävs för Firebase, samma Wi-Fi, http):
+  se `web_client/README.md`.
+
+### Konfiguration
+1. Fyll i din Firebase-webbkonfiguration i `web_client/firebase-config.js`
+   (samma projekt som mobilappen).
+2. Klart — `web_client/` buntas som assets och serveras automatiskt av värden.
 
 ## Spelregler (fas 1)
 1. Värden skapar ett rum och väljer en spellista + mål-antal kort (t.ex. 10).
@@ -121,6 +140,9 @@ lib/
 - [x] Fas 4: "Steal" (gissar den aktiva spelaren fel får nästa spelare stjäla
   kortet), val av mål-antal kort i lobbyn, emoji-avatarer per spelare, och
   ljud-/haptic-återkoppling vid rätt/fel/stöld (`services/sound_service.dart`).
+- [x] Gå med via QR/webben: värden delar en QR-kod till en LAN-serverad
+  webbklient (`web_client/` + `services/lan_server_service.dart`); iOS/Android/
+  dator kan ansluta utan app. Värden blev "jukebox" (spelar musiken högt).
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.
 
 ### Steal-mekaniken

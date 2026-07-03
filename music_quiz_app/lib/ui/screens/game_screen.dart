@@ -54,6 +54,7 @@ class GameScreen extends StatelessWidget {
           _NowPlaying(
             track: round?.track,
             canAct: controller.canAct,
+            isHost: controller.isHost,
             isStealPhase: controller.isStealPhase,
             actorName: controller.actorName,
             isPaused: controller.isPaused,
@@ -126,6 +127,7 @@ class _OfflineBanner extends StatelessWidget {
 class _NowPlaying extends StatelessWidget {
   final Track? track;
   final bool canAct;
+  final bool isHost;
   final bool isStealPhase;
   final String actorName;
   final bool isPaused;
@@ -134,6 +136,7 @@ class _NowPlaying extends StatelessWidget {
   const _NowPlaying({
     required this.track,
     required this.canAct,
+    required this.isHost,
     required this.isStealPhase,
     required this.actorName,
     required this.isPaused,
@@ -174,7 +177,8 @@ class _NowPlaying extends StatelessWidget {
               draggable: canAct,
             ),
           ),
-          if (canAct) ...[
+          // Bara värden (jukeboxen) styr uppspelningen.
+          if (isHost) ...[
             const SizedBox(height: 12),
             FilledButton.tonalIcon(
               onPressed: onToggle,
