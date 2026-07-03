@@ -18,6 +18,13 @@ import { firebaseConfig } from "./firebase-config.js";
 
 const AVATARS = ["🎧", "🎸", "🎤", "🥁", "🎹", "🎺", "🎷", "🎻"];
 
+// Slumpat men valbart namn: den som ansluter via QR får direkt ett namn att se.
+const NAME_ADJ = ["Glada", "Snabba", "Vilda", "Coola", "Grymma", "Fräcka", "Rockiga", "Läckra"];
+const NAME_NOUN = ["Gitarren", "Trumman", "Basen", "Pianot", "Mikrofonen", "Synten", "Trumpeten", "Fiolen"];
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const randomName = () => `${pick(NAME_ADJ)} ${pick(NAME_NOUN)}`;
+const MAX_YEAR = new Date().getFullYear();
+
 const appEl = document.getElementById("app");
 const db = getDatabase(initializeApp(firebaseConfig));
 const auth = getAuth();
@@ -25,10 +32,11 @@ const auth = getAuth();
 const state = {
   uid: null,
   code: new URLSearchParams(location.search).get("code")?.toUpperCase() || "",
-  name: "",
-  avatar: AVATARS[0],
+  name: randomName(), // förifyllt, men redigerbart
+  avatar: pick(AVATARS),
   joined: false,
   room: null,
+  yearGuess: 1990,
   banner: null, // { ok: bool, text }
   error: null,
 };
@@ -64,6 +72,16 @@ function actorId(round) {
     : round.activePlayerId;
 }
 
+function rankValue(room, p) {
+  return room.mode === "year" ? p.score || 0 : timelineOf(p).length;
+}
+
+function ranking(room) {
+  return Object.values(room.players || {}).sort(
+    (a, b) => rankValue(room, b) - rankValue(room, a)
+  );
+}
+
 // ---- Spellogik (spegel av Dart-sidans Scoring) --------------------------
 
 function isCorrectPlacement(timeline, candidate, position) {
@@ -81,6 +99,15 @@ function insertSorted(timeline, candidate) {
   while (i < result.length && result[i].year <= candidate.year) i++;
   result.splice(i, 0, candidate);
   return result;
+}
+
+// Poäng för årtalsgissning: exakt=5, 1–2 år=3, 3–5 år=1, annars 0.
+function yearGuessPoints(actual, guess) {
+  const diff = Math.abs(actual - guess);
+  if (diff === 0) return 5;
+  if (diff <= 2) return 3;
+  if (diff <= 5) return 1;
+  return 0;
 }
 
 // ---- Nätverksåtgärder ---------------------------------------------------
@@ -121,6 +148,7 @@ async function placeCurrentTrack(position) {
   const me = room && room.players && room.players[state.uid];
   if (!room || !round || !me) return;
   if (actorId(round) !== state.uid) return;
+  if (room.mode === "year") return; // årtalsläge använder submitYearGuess
 
   const myTimeline = timelineOf(me);
   const correct = isCorrectPlacement(myTimeline, round.track, position);
@@ -153,6 +181,34 @@ async function placeCurrentTrack(position) {
   }
 }
 
+async function submitYearGuess(year) {
+  const room = state.room;
+  const round = room && room.currentRound;
+  const me = room && room.players && room.players[state.uid];
+  if (!room || !round || !me) return;
+  if (actorId(round) !== state.uid) return;
+  if (room.mode !== "year") return;
+
+  const points = yearGuessPoints(round.track.year, year);
+  const myTimeline = timelineOf(me);
+  await advanceTurn(
+    room,
+    round,
+    insertSorted(myTimeline, round.track),
+    (me.score || 0) + points
+  );
+  const actual = round.track.year;
+  const msg =
+    points === 5
+      ? `🎯 Full träff! Rätt år: ${actual}. +5 poäng`
+      : points === 3
+      ? `Nära! Rätt år: ${actual}. +3 poäng`
+      : points === 1
+      ? `Rätt år: ${actual}. +1 poäng`
+      : `Fel — rätt år: ${actual}. 0 poäng`;
+  showBanner(points > 0, msg);
+}
+
 async function advanceTurn(room, round, newTimeline, newScore) {
   const turnOrder = room.turnOrder || [];
   const deck = deckOf(room);
@@ -172,7 +228,11 @@ async function advanceTurn(room, round, newTimeline, newScore) {
     },
   });
 
-  if (newTimeline.length >= room.targetCards) {
+  const reached =
+    room.mode === "year"
+      ? newScore >= room.targetCards
+      : newTimeline.length >= room.targetCards;
+  if (reached) {
     await update(ref(db, `rooms/${state.code}`), { status: "finished" });
   }
 }
@@ -270,54 +330,78 @@ function renderLobby(room) {
   `);
 }
 
-function scoreboard(room) {
-  return `<div class="scoreboard">${Object.values(room.players || {})
-    .map(
-      (p) =>
-        `<span class="score">${esc(p.avatar || "🎧")} ${timelineOf(p).length}</span>`
-    )
-    .join("")}</div>`;
+const MEDALS = ["🥇", "🥈", "🥉"];
+
+function leaderboardHtml(room) {
+  const rows = ranking(room)
+    .map((p, i) => {
+      const val =
+        room.mode === "year"
+          ? `${p.score || 0} p`
+          : `${timelineOf(p).length} kort`;
+      const cls = `lb-row${i === 0 ? " lead" : ""}${p.id === state.uid ? " me" : ""}`;
+      return `<div class="${cls}">
+        <span class="rank">${i < 3 ? MEDALS[i] : i + 1}</span>
+        <span class="a">${esc(p.avatar || "🎧")}</span>
+        <span class="nm">${esc(p.name)}${p.id === state.uid ? " (du)" : ""}</span>
+        <span class="val">${val}</span>
+      </div>`;
+    })
+    .join("");
+  return `<div class="leaderboard">${rows}</div>`;
 }
 
 function renderGame(room) {
   const round = room.currentRound;
   const me = room.players[state.uid];
   const canAct = actorId(round) === state.uid;
+  const isYear = room.mode === "year";
   const steal = round && round.phase === "stealing";
   const actorName = (room.players[actorId(round)] || {}).name || "–";
 
   let header;
   if (canAct && steal) header = "STEAL! 😎 Placera låten rätt och stjäl kortet";
-  else if (canAct) header = "Din tur — placera låten rätt i tiden";
+  else if (canAct) header = isYear ? "Din tur — gissa utgivningsåret" : "Din tur — placera låten rätt i tiden";
   else if (steal) header = `${esc(actorName)} försöker stjäla kortet…`;
-  else header = `${esc(actorName)} spelar`;
+  else header = isYear ? `${esc(actorName)} gissar årtalet` : `${esc(actorName)} spelar`;
 
   const myTimeline = timelineOf(me);
 
-  // Tidslinje med placeringsknappar (bara när det är min tur).
-  let timelineHtml = "";
-  for (let i = 0; i <= myTimeline.length; i++) {
-    if (canAct)
-      timelineHtml += `<button class="place-btn" data-pos="${i}">Placera här</button>`;
-    if (i < myTimeline.length) {
-      const t = myTimeline[i];
-      timelineHtml += `
-        <div class="timeline-card">
-          <div class="year-badge">${esc(t.year)}</div>
-          <div><div><b>${esc(t.title)}</b></div>
-          <div class="muted">${esc(t.artist)}</div></div>
-        </div>`;
+  // Åtgärdsyta beroende på läge.
+  let actionHtml = "";
+  if (isYear && canAct) {
+    actionHtml = `
+      <div class="card">
+        <div class="muted">5 p exakt • 3 p 1–2 år • 1 p 3–5 år</div>
+        <div id="yearval" style="font-size:2.2rem;text-align:center;font-weight:700">${state.yearGuess}</div>
+        <input id="yearslider" type="range" min="1950" max="${MAX_YEAR}" value="${state.yearGuess}" style="width:100%" />
+        <button id="guess">Gissa</button>
+      </div>`;
+  } else if (!isYear) {
+    // Tidslinje med placeringsknappar (bara när det är min tur).
+    for (let i = 0; i <= myTimeline.length; i++) {
+      if (canAct)
+        actionHtml += `<button class="place-btn" data-pos="${i}">Placera här</button>`;
+      if (i < myTimeline.length) {
+        const t = myTimeline[i];
+        actionHtml += cardHtml(t);
+      }
     }
   }
 
+  // I årtalsläge visas insamlade låtar som read-only board.
+  const boardHtml = isYear
+    ? `<h3 style="margin-top:20px">Dina låtar (${myTimeline.length})</h3>` +
+      (myTimeline.length ? myTimeline.map(cardHtml).join("") : `<p class="muted">Inga låtar än.</p>`)
+    : `<h3 style="margin-top:20px">Din tidslinje</h3>` +
+      (myTimeline.length || canAct ? "" : `<p class="muted">Inga kort än.</p>`);
+
   html(`
-    <p class="muted">Först till ${room.targetCards} kort</p>
-    ${scoreboard(room)}
+    <p class="muted">Först till ${room.targetCards} ${isYear ? "poäng" : "kort"}</p>
+    ${leaderboardHtml(room)}
     ${
       state.banner
-        ? `<div class="banner ${state.banner.ok ? "ok" : "bad"}">${esc(
-            state.banner.text
-          )}</div>`
+        ? `<div class="banner ${state.banner.ok ? "ok" : "bad"}">${esc(state.banner.text)}</div>`
         : ""
     }
     <div class="nowplaying ${steal ? "steal" : ""}">
@@ -327,11 +411,19 @@ function renderGame(room) {
       <div class="muted">${round ? esc(round.track.artist) : ""}</div>
       <div class="muted" style="margin-top:8px">🔊 Lyssna på värdens telefon</div>
     </div>
-    <h3 style="margin-top:20px">Din tidslinje</h3>
-    ${timelineHtml || `<p class="muted">Inga kort än.</p>`}
+    ${isYear ? actionHtml : `<h3 style="margin-top:20px">Din tidslinje</h3>${actionHtml || `<p class="muted">Inga kort än.</p>`}`}
+    ${isYear ? boardHtml : ""}
   `);
 
-  if (canAct) {
+  if (isYear && canAct) {
+    const slider = document.getElementById("yearslider");
+    slider.oninput = (e) => {
+      state.yearGuess = Number(e.target.value);
+      document.getElementById("yearval").textContent = state.yearGuess;
+    };
+    document.getElementById("guess").onclick = () =>
+      submitYearGuess(state.yearGuess).catch((e) => setError("" + e));
+  } else if (!isYear && canAct) {
     appEl.querySelectorAll(".place-btn").forEach((el) => {
       el.onclick = () =>
         placeCurrentTrack(Number(el.dataset.pos)).catch((e) => setError("" + e));
@@ -339,17 +431,24 @@ function renderGame(room) {
   }
 }
 
+function cardHtml(t) {
+  return `
+    <div class="timeline-card">
+      <div class="year-badge">${esc(t.year)}</div>
+      <div><div><b>${esc(t.title)}</b></div>
+      <div class="muted">${esc(t.artist)}</div></div>
+    </div>`;
+}
+
 function renderFinished(room) {
-  const players = Object.values(room.players || {});
-  const winner = players.find((p) => timelineOf(p).length >= room.targetCards);
+  const winner = ranking(room)[0];
   html(`
-    <div class="center">
-      <div style="text-align:center">
-        <div style="font-size:72px">🏆</div>
-        <h1>${winner ? esc(winner.name) : "Ingen"} vann!</h1>
-        <p class="muted">${winner ? timelineOf(winner).length : 0} kort i rätt ordning</p>
-      </div>
+    <div style="text-align:center">
+      <div style="font-size:72px">🏆</div>
+      <h1>${winner ? esc(winner.name) : "Ingen"} vann!</h1>
     </div>
+    <h3>Slutställning</h3>
+    ${leaderboardHtml(room)}
   `);
 }
 

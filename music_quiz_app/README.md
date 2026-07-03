@@ -143,6 +143,15 @@ Wi-Fi — iPhone, Android, dator — skannar den, öppnar webbklienten
 - [x] Gå med via QR/webben: värden delar en QR-kod till en LAN-serverad
   webbklient (`web_client/` + `services/lan_server_service.dart`); iOS/Android/
   dator kan ansluta utan app. Värden blev "jukebox" (spelar musiken högt).
+- [x] Interaktiv leaderboard (`ui/widgets/leaderboard.dart`) som uppdateras
+  varje omgång och visar vem som leder — i spelet, i en bottensheet och på
+  resultatskärmen. Speglad i webbklienten.
+- [x] Årtalsläge: nytt spelläge (välj i lobbyn) där man gissar utgivningsåret
+  med ett reglage; poäng efter träffsäkerhet — **5** för exakt, **3** för 1–2
+  år fel, **1** för 3–5 år fel, annars 0 (`Scoring.yearGuessPoints`). Vinst på
+  poängmål i stället för antal kort.
+- [x] Slumpat namn vid QR-anslutning: webbspelare får ett förifyllt, redigerbart
+  namn direkt.
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.
 
 ### Steal-mekaniken

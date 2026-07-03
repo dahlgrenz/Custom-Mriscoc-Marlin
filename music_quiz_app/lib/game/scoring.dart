@@ -21,6 +21,16 @@ class Scoring {
     return true;
   }
 
+  /// Poäng för en årtalsgissning efter hur nära [guess] är [actual]:
+  /// exakt = 5, 1–2 år fel = 3, 3–5 år fel = 1, mer än 5 år fel = 0.
+  static int yearGuessPoints(int actual, int guess) {
+    final diff = (actual - guess).abs();
+    if (diff == 0) return 5;
+    if (diff <= 2) return 3;
+    if (diff <= 5) return 1;
+    return 0;
+  }
+
   /// Returnerar en ny tidslinje med [candidate] insatt på rätt kronologisk plats.
   static List<Track> insertSorted(List<Track> timeline, Track candidate) {
     final result = List<Track>.from(timeline);

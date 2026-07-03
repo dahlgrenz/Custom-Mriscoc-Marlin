@@ -35,6 +35,23 @@ void main() {
     });
   });
 
+  group('Scoring.yearGuessPoints', () {
+    test('exakt träff ger 5', () {
+      expect(Scoring.yearGuessPoints(1994, 1994), 5);
+    });
+    test('1–2 år fel ger 3', () {
+      expect(Scoring.yearGuessPoints(1994, 1992), 3);
+      expect(Scoring.yearGuessPoints(1994, 1996), 3);
+    });
+    test('3–5 år fel ger 1', () {
+      expect(Scoring.yearGuessPoints(1994, 1991), 1);
+      expect(Scoring.yearGuessPoints(1994, 1999), 1);
+    });
+    test('mer än 5 år fel ger 0', () {
+      expect(Scoring.yearGuessPoints(1994, 1980), 0);
+    });
+  });
+
   group('Scoring.insertSorted', () {
     test('sätter in i kronologisk ordning', () {
       final result = Scoring.insertSorted([t(1980), t(2010)], t(1995));

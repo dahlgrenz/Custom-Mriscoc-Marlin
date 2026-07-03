@@ -3,6 +3,10 @@ import 'track.dart';
 
 enum RoomStatus { lobby, playing, finished }
 
+/// Spelläge. [timeline] = placera låten rätt i tiden (Hitster). [year] = gissa
+/// utgivningsåret; poäng efter hur nära (5/3/1).
+enum GameMode { timeline, year }
+
 /// Rundans fas: den aktiva spelaren gissar först; om hen har fel får en
 /// utmanare (nästa spelare) chansen att stjäla kortet.
 enum RoundPhase { guessing, stealing }
@@ -50,6 +54,9 @@ class GameRoom {
   final String code;
   final String hostId;
   final RoomStatus status;
+  final GameMode mode;
+
+  /// Vinstmål. I [GameMode.timeline] = antal kort; i [GameMode.year] = poäng.
   final int targetCards;
   final String playlistId;
   final String playlistName;
@@ -62,6 +69,7 @@ class GameRoom {
     required this.code,
     required this.hostId,
     required this.status,
+    this.mode = GameMode.timeline,
     required this.targetCards,
     required this.playlistId,
     this.playlistName = '',
@@ -74,17 +82,24 @@ class GameRoom {
   String? get activePlayerId =>
       turnOrder.isEmpty ? null : turnOrder[turnIndex % turnOrder.length];
 
-  Player? get winner {
-    for (final p in players.values) {
-      if (p.timeline.length >= targetCards) return p;
-    }
-    return null;
+  /// Rankvärde för leaderboard/vinnare: poäng i årtalsläge, annars antal kort.
+  int rankValue(Player p) =>
+      mode == GameMode.year ? p.score : p.timeline.length;
+
+  /// Spelarna sorterade från ledare till sist.
+  List<Player> get ranking {
+    final list = players.values.toList()
+      ..sort((a, b) => rankValue(b).compareTo(rankValue(a)));
+    return list;
   }
+
+  Player? get winner => players.isEmpty ? null : ranking.first;
 
   Map<String, dynamic> toJson() => {
         'code': code,
         'hostId': hostId,
         'status': status.name,
+        'mode': mode.name,
         'targetCards': targetCards,
         'playlistId': playlistId,
         'playlistName': playlistName,
@@ -103,6 +118,10 @@ class GameRoom {
       status: RoomStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => RoomStatus.lobby,
+      ),
+      mode: GameMode.values.firstWhere(
+        (m) => m.name == json['mode'],
+        orElse: () => GameMode.timeline,
       ),
       targetCards: (json['targetCards'] as num?)?.toInt() ?? 10,
       playlistId: json['playlistId'] as String? ?? '',

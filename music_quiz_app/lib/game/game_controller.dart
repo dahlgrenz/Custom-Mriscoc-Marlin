@@ -12,9 +12,6 @@ import '../services/music/music_source.dart';
 import '../services/sound_service.dart';
 import 'scoring.dart';
 
-/// Utfallet av en placering, för återkoppling i UI:t.
-enum PlacementResult { correct, wrong, stolen, missed }
-
 /// Binder ihop musikkälla + multiplayer-repo + spellogik och exponerar ett
 /// observerbart speltillstånd för UI:t.
 class GameController extends ChangeNotifier {
@@ -40,9 +37,11 @@ class GameController extends ChangeNotifier {
   String? _lastError;
   String? get lastError => _lastError;
 
-  /// Senaste placeringsutfall (för feedback + ljud). Rensas efter visning.
-  PlacementResult? _lastResult;
-  PlacementResult? get lastResult => _lastResult;
+  /// Återkoppling att visa (t.ex. "Rätt!" / "+3 poäng"). Rensas efter visning.
+  String? _feedback;
+  bool _feedbackGood = true;
+  String? get feedback => _feedback;
+  bool get feedbackGood => _feedbackGood;
 
   bool _busy = false;
   bool get busy => _busy;
@@ -63,10 +62,11 @@ class GameController extends ChangeNotifier {
   bool get isHost => _room?.hostId == myPlayerId;
   Player? get me => _room?.players[myPlayerId];
 
+  GameMode get mode => _room?.mode ?? GameMode.timeline;
+
   /// Vem som får agera just nu (gissaren eller utmanaren).
   bool get canAct => _room?.currentRound?.actorId == myPlayerId;
-  bool get isStealPhase =>
-      _room?.currentRound?.phase == RoundPhase.stealing;
+  bool get isStealPhase => _room?.currentRound?.phase == RoundPhase.stealing;
 
   /// Namn på den som förväntas agera just nu.
   String get actorName {
@@ -81,9 +81,9 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearResult() {
-    if (_lastResult == null) return;
-    _lastResult = null;
+  void clearFeedback() {
+    if (_feedback == null) return;
+    _feedback = null;
     notifyListeners();
   }
 
@@ -92,17 +92,17 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _report(PlacementResult result) async {
-    _lastResult = result;
+  Future<void> _reportFeedback(String text,
+      {required bool good, bool steal = false}) async {
+    _feedback = text;
+    _feedbackGood = good;
     notifyListeners();
-    switch (result) {
-      case PlacementResult.correct:
-        await sound.correct();
-      case PlacementResult.stolen:
-        await sound.steal();
-      case PlacementResult.wrong:
-      case PlacementResult.missed:
-        await sound.wrong();
+    if (steal) {
+      await sound.steal();
+    } else if (good) {
+      await sound.correct();
+    } else {
+      await sound.wrong();
     }
   }
 
@@ -181,7 +181,7 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  /// Värden justerar mål-antal kort i lobbyn.
+  /// Värden justerar vinstmål (kort eller poäng) i lobbyn.
   Future<void> setTargetCards(int target) async {
     final room = _room;
     if (room == null || !isHost) return;
@@ -192,16 +192,30 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  /// Placerar den nu spelande låten på [position] i den agerande spelarens
-  /// tidslinje. Hanterar både gissningsfasen och steal-fasen.
+  /// Värden byter spelläge i lobbyn. Sätter samtidigt ett rimligt standardmål
+  /// för läget (kort i tidslinje, poäng i årtal).
+  Future<void> setMode(GameMode m) async {
+    final room = _room;
+    if (room == null || !isHost) return;
+    try {
+      await repo.updateMode(code: room.code, mode: m);
+      await repo.updateTargetCards(
+          code: room.code, target: m == GameMode.year ? 25 : 10);
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  /// TIDSLINJELÄGE: placerar den nu spelande låten på [position] i den
+  /// agerande spelarens tidslinje. Hanterar gissningsfas och steal-fas.
   Future<void> placeCurrentTrack(int position) async {
     final room = _room;
     final round = room?.currentRound;
     final player = me;
     if (room == null || round == null || player == null || !canAct) return;
+    if (mode != GameMode.timeline) return;
 
     try {
-      await music.pause();
       final correct =
           Scoring.isCorrectPlacement(player.timeline, round.track, position);
 
@@ -212,7 +226,7 @@ class GameController extends ChangeNotifier {
             score: player.score + 1,
           );
           await _advanceTurn(room, round, updated);
-          await _report(PlacementResult.correct);
+          await _reportFeedback('Rätt! Kortet är ditt 🎉', good: true);
         } else {
           // Fel gissning → nästa spelare får chansen att stjäla samma låt.
           final stealer =
@@ -226,7 +240,9 @@ class GameController extends ChangeNotifier {
               stealerId: stealer,
             ),
           );
-          await _report(PlacementResult.wrong);
+          await _reportFeedback(
+              'Fel plats! Nästa spelare får chansen att stjäla.',
+              good: false);
         }
       } else {
         // Steal-fas: jag är utmanaren.
@@ -237,8 +253,39 @@ class GameController extends ChangeNotifier {
               )
             : player;
         await _advanceTurn(room, round, updated);
-        await _report(correct ? PlacementResult.stolen : PlacementResult.missed);
+        await _reportFeedback(
+            correct ? 'Stöld! Du snodde kortet 😎' : 'Missade stölden — kortet försvinner.',
+            good: correct,
+            steal: correct);
       }
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  /// ÅRTALSLÄGE: den aktiva spelaren gissar utgivningsåret (poäng 5/3/1).
+  Future<void> submitYearGuess(int year) async {
+    final room = _room;
+    final round = room?.currentRound;
+    final player = me;
+    if (room == null || round == null || player == null || !canAct) return;
+    if (mode != GameMode.year) return;
+
+    try {
+      final points = Scoring.yearGuessPoints(round.track.year, year);
+      final updated = player.copyWith(
+        timeline: Scoring.insertSorted(player.timeline, round.track),
+        score: player.score + points,
+      );
+      await _advanceTurn(room, round, updated);
+      final actual = round.track.year;
+      final msg = switch (points) {
+        5 => '🎯 Full träff! Rätt år var $actual. +5 poäng',
+        3 => 'Nära! Rätt år var $actual. +3 poäng',
+        1 => 'Rätt år var $actual. +1 poäng',
+        _ => 'Fel — rätt år var $actual. 0 poäng',
+      };
+      await _reportFeedback(msg, good: points > 0);
     } catch (e) {
       _setError(e);
     }
@@ -259,7 +306,10 @@ class GameController extends ChangeNotifier {
       nextRound: GameRound(track: nextTrack, activePlayerId: nextActive),
     );
 
-    if (updatedActor.timeline.length >= room.targetCards) {
+    final reached = room.mode == GameMode.year
+        ? updatedActor.score >= room.targetCards
+        : updatedActor.timeline.length >= room.targetCards;
+    if (reached) {
       await repo.finishGame(room.code);
     }
   }

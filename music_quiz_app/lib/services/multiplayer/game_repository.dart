@@ -41,6 +41,7 @@ class GameRepository {
       code: code,
       hostId: hostId,
       status: RoomStatus.lobby,
+      mode: GameMode.timeline,
       targetCards: targetCards,
       playlistId: playlistId,
       playlistName: playlistName,
@@ -74,12 +75,16 @@ class GameRepository {
             .toJson());
   }
 
-  /// Värden justerar mål-antal kort i lobbyn (synkas till alla).
+  /// Värden justerar mål-antal kort/poäng i lobbyn (synkas till alla).
   Future<void> updateTargetCards({
     required String code,
     required int target,
   }) =>
       _room(code).child('targetCards').set(target);
+
+  /// Värden byter spelläge i lobbyn.
+  Future<void> updateMode({required String code, required GameMode mode}) =>
+      _room(code).child('mode').set(mode.name);
 
   /// Skriver om enbart den nuvarande rundan (används vid steal-övergången).
   Future<void> updateRound({

@@ -124,7 +124,33 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 },
               ),
             ),
-            // Mål-antal kort: värden väljer, övriga ser valet.
+            // Spelläge: värden väljer.
+            Row(
+              children: [
+                const Icon(Icons.style, size: 18),
+                const SizedBox(width: 8),
+                Text('Läge:', style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(width: 12),
+                if (controller.isHost)
+                  Expanded(
+                    child: SegmentedButton<GameMode>(
+                      segments: const [
+                        ButtonSegment(
+                            value: GameMode.timeline, label: Text('Tidslinje')),
+                        ButtonSegment(
+                            value: GameMode.year, label: Text('Årtal')),
+                      ],
+                      selected: {room.mode},
+                      onSelectionChanged: (s) => controller.setMode(s.first),
+                    ),
+                  )
+                else
+                  Text(room.mode == GameMode.year ? 'Årtal' : 'Tidslinje',
+                      style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Vinstmål (kort i tidslinje, poäng i årtal).
             Row(
               children: [
                 const Icon(Icons.flag, size: 18),
@@ -133,7 +159,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 const SizedBox(width: 12),
                 if (controller.isHost)
                   ...[
-                    for (final n in const [5, 10, 15])
+                    for (final n in (room.mode == GameMode.year
+                        ? const [15, 25, 40]
+                        : const [5, 10, 15]))
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: ChoiceChip(
@@ -144,7 +172,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
                       )
                   ]
                 else
-                  Text('${room.targetCards} kort',
+                  Text(
+                      '${room.targetCards} ${room.mode == GameMode.year ? "poäng" : "kort"}',
                       style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
