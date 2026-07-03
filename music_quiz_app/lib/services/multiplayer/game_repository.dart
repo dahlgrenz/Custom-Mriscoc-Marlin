@@ -27,6 +27,7 @@ class GameRepository {
     required String hostId,
     required String hostName,
     required String playlistId,
+    String playlistName = '',
     int targetCards = 10,
   }) async {
     // Försök tills vi hittar en oanvänd kod.
@@ -41,6 +42,7 @@ class GameRepository {
       status: RoomStatus.lobby,
       targetCards: targetCards,
       playlistId: playlistId,
+      playlistName: playlistName,
       players: {
         hostId: Player(id: hostId, name: hostName),
       },
@@ -67,6 +69,14 @@ class GameRepository {
     await _room(code)
         .child('players/$playerId')
         .set(Player(id: playerId, name: playerName).toJson());
+  }
+
+  /// True/false-ström för om klienten är ansluten till Firebase (för
+  /// offline-banner och återanslutning). Firebase återansluter automatiskt.
+  Stream<bool> connectionState() {
+    return _db.ref('.info/connected').onValue.map(
+          (event) => event.snapshot.value == true,
+        );
   }
 
   /// Ström av rummets tillstånd i realtid.

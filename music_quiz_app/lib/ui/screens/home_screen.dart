@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../../game/game_controller.dart';
 import '../../services/auth/spotify_auth_service.dart';
 import '../../services/multiplayer/game_repository.dart';
+import '../../models/playlist_info.dart';
 import '../../services/music/music_source.dart';
 import 'lobby_screen.dart';
+import 'playlist_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,9 +20,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _nameController = TextEditingController();
   final _codeController = TextEditingController();
-
-  // Standardspellista — byt gärna. (Detta är Spotifys "Top 50 – Global".)
-  static const _defaultPlaylist = '37i9dQZEVXbMDoHDwVN2tF';
 
   bool _busy = false;
 
@@ -40,12 +39,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _createRoom() async {
     if (!_validate()) return;
+
+    // Låt värden välja spellista innan rummet skapas.
+    final playlist = await Navigator.of(context).push<PlaylistInfo>(
+      MaterialPageRoute(builder: (_) => const PlaylistPickerScreen()),
+    );
+    if (playlist == null || !mounted) return; // avbröt valet
+
     final repo = context.read<GameRepository>();
     await _run(() async {
       final code = await repo.createRoom(
         hostId: _myId,
         hostName: _nameController.text.trim(),
-        playlistId: _defaultPlaylist,
+        playlistId: playlist.id,
+        playlistName: playlist.name,
       );
       _openLobby(code);
     });

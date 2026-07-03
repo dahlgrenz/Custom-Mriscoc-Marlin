@@ -36,6 +36,7 @@ class GameRoom {
   final RoomStatus status;
   final int targetCards;
   final String playlistId;
+  final String playlistName;
   final Map<String, Player> players;
   final List<String> turnOrder;
   final int turnIndex;
@@ -47,6 +48,7 @@ class GameRoom {
     required this.status,
     required this.targetCards,
     required this.playlistId,
+    this.playlistName = '',
     required this.players,
     this.turnOrder = const [],
     this.turnIndex = 0,
@@ -69,6 +71,7 @@ class GameRoom {
         'status': status.name,
         'targetCards': targetCards,
         'playlistId': playlistId,
+        'playlistName': playlistName,
         'players': {for (final e in players.entries) e.key: e.value.toJson()},
         'turnOrder': turnOrder,
         'turnIndex': turnIndex,
@@ -87,6 +90,7 @@ class GameRoom {
       ),
       targetCards: (json['targetCards'] as num?)?.toInt() ?? 10,
       playlistId: json['playlistId'] as String? ?? '',
+      playlistName: json['playlistName'] as String? ?? '',
       players: {
         for (final e in rawPlayers.entries)
           '${e.key}': Player.fromJson(Map<String, dynamic>.from(e.value as Map)),

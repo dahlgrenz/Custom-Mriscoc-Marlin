@@ -42,8 +42,13 @@ class GameController extends ChangeNotifier {
   bool _isPaused = true;
   bool get isPaused => _isPaused;
 
+  /// Om klienten är ansluten till Firebase (för offline-banner).
+  bool _isOnline = true;
+  bool get isOnline => _isOnline;
+
   StreamSubscription<GameRoom?>? _roomSub;
   StreamSubscription<PlaybackState>? _playbackSub;
+  StreamSubscription<bool>? _connectionSub;
 
   /// Leken (spellistan i slumpad ordning) — laddas från rummet vid spelstart.
   List<Track> _deck = [];
@@ -77,6 +82,15 @@ class GameController extends ChangeNotifier {
         notifyListeners();
       }
     }, onError: (_) {/* status-strömmen är best effort */});
+
+    // Följ nätverksanslutningen för offline-banner.
+    _connectionSub?.cancel();
+    _connectionSub = repo.connectionState().listen((online) {
+      if (_isOnline != online) {
+        _isOnline = online;
+        notifyListeners();
+      }
+    }, onError: (_) {});
   }
 
   // Spelar bara automatiskt vid övergången till en ny låt, inte vid varje
@@ -198,6 +212,7 @@ class GameController extends ChangeNotifier {
   void dispose() {
     _roomSub?.cancel();
     _playbackSub?.cancel();
+    _connectionSub?.cancel();
     music.stop();
     super.dispose();
   }

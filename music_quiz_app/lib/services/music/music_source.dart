@@ -1,3 +1,4 @@
+import '../../models/playlist_info.dart';
 import '../../models/track.dart';
 
 /// Källoberoende uppspelningsstatus.
@@ -11,6 +12,10 @@ class PlaybackState {
 /// aldrig på Spotify direkt — så att källan kan bytas (Deezer, iTunes-previews,
 /// egna licensierade klipp) utan att röra spelet.
 abstract class MusicSource {
+  /// Hämtar spellistor användaren kan välja bland (t.ex. egna spellistor).
+  /// Kastar [AppException] vid fel.
+  Future<List<PlaylistInfo>> fetchPlaylists();
+
   /// Hämtar låtarna i en spellista, med metadata (inkl. utgivningsår) ifyllt.
   /// Kastar [AppException] vid fel.
   Future<List<Track>> fetchPlaylistTracks(String playlistId);

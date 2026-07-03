@@ -69,10 +69,12 @@ lib/
 ├── main.dart                     App-start: Firebase-init, providers
 ├── app.dart                      MaterialApp + routing
 ├── core/
-│   └── theme.dart                Färger, typografi
+│   ├── theme.dart                Färger, typografi
+│   └── app_exception.dart        Typade fel → svenska användarmeddelanden
 ├── models/                       Rena datamodeller (immutable, JSON till/från Firebase)
 │   ├── track.dart
 │   ├── player.dart
+│   ├── playlist_info.dart
 │   └── game_room.dart
 ├── services/
 │   ├── music/
@@ -86,8 +88,7 @@ lib/
 │   ├── scoring.dart              Ren spellogik: är placeringen rätt?
 │   └── game_controller.dart      Speltillstånd (ChangeNotifier) som binder ihop allt
 └── ui/
-    ├── screens/                  Home, Lobby, Game
-    └── widgets/                  Tidslinje, spelarlista m.m.
+    └── screens/                  Home, PlaylistPicker, Lobby, Game
 ```
 
 **Designprinciper**
@@ -111,6 +112,11 @@ lib/
 - [x] Fas 2: Robust Spotify-auth (anslutningstillstånd, token-förnyelse,
   återanslutning), uppspelning med play/paus, och genomgående felhantering
   med användarvänliga meddelanden (`core/app_exception.dart`).
-- [ ] Fas 3: Full realtids-UI (tidslinje-drag & drop, live-poäng, återanslutning).
-- [ ] Fas 4: "Steal"/utmaning, spellistval, avatarer, ljud/animationer.
+- [x] Val av spellista: värden bläddrar bland sina Spotify-spellistor och väljer
+  en innan rummet skapas (`ui/screens/playlist_picker_screen.dart`); namnet visas
+  i lobbyn.
+- [x] Fas 3: Realtids-UI — dra-och-släpp av låten till rätt plats i tidslinjen,
+  animerade kort och poäng, samt offline-banner med automatisk återanslutning.
+- [ ] Fas 4: "Steal"/utmaning (andra spelare kan kontra en placering), val av
+  mål-antal kort, avatarer, ljudeffekter.
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.

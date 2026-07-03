@@ -6,6 +6,7 @@ import 'package:spotify_sdk/spotify_sdk.dart';
 import 'package:spotify_sdk/models/player_state.dart' show PlayerState;
 
 import '../../core/app_exception.dart';
+import '../../models/playlist_info.dart';
 import '../../models/track.dart';
 import '../auth/spotify_auth_service.dart';
 import 'music_source.dart';
@@ -20,6 +21,51 @@ class SpotifyMusicSource implements MusicSource {
   SpotifyMusicSource(this.auth);
 
   static const _apiBase = 'https://api.spotify.com/v1';
+
+  @override
+  Future<List<PlaylistInfo>> fetchPlaylists() async {
+    final token = await auth.ensureConnected();
+    final playlists = <PlaylistInfo>[];
+    var url = Uri.parse('$_apiBase/me/playlists?limit=50');
+
+    try {
+      while (true) {
+        final res =
+            await http.get(url, headers: {'Authorization': 'Bearer $token'});
+        if (res.statusCode == 401) {
+          throw const AppException(
+              'Spotify-sessionen gick ut. Anslut igen och försök på nytt.');
+        }
+        if (res.statusCode != 200) {
+          throw AppException(
+              'Kunde inte hämta dina spellistor (fel ${res.statusCode}).');
+        }
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        for (final item in (body['items'] as List)) {
+          if (item == null) continue;
+          final p = Map<String, dynamic>.from(item as Map);
+          final images = (p['images'] as List?) ?? [];
+          final tracks = p['tracks'] as Map?;
+          final owner = p['owner'] as Map?;
+          playlists.add(PlaylistInfo(
+            id: p['id'] as String,
+            name: p['name'] as String? ?? 'Namnlös spellista',
+            imageUrl: images.isEmpty ? null : images.first['url'] as String?,
+            trackCount: (tracks?['total'] as num?)?.toInt() ?? 0,
+            ownerName: owner?['display_name'] as String? ?? '',
+          ));
+        }
+        final next = body['next'];
+        if (next == null) break;
+        url = Uri.parse(next as String);
+      }
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw AppException.from(e);
+    }
+    return playlists;
+  }
 
   @override
   Future<List<Track>> fetchPlaylistTracks(String playlistId) async {

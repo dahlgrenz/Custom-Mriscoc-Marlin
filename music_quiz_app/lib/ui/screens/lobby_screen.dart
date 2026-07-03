@@ -58,6 +58,17 @@ class LobbyScreen extends StatelessWidget {
                     )),
             const SizedBox(height: 4),
             const Text('Dela koden — kompisar går med från startskärmen.'),
+            if (room.playlistName.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Row(children: [
+                const Icon(Icons.queue_music, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Spellista: ${room.playlistName}',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ),
+              ]),
+            ],
             const SizedBox(height: 24),
             Text('Spelare (${players.length})',
                 style: Theme.of(context).textTheme.titleMedium),
