@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -7,6 +8,9 @@ import '../../game/game_controller.dart';
 import '../../models/game_room.dart';
 import '../../services/lan_server_service.dart';
 import 'game_screen.dart';
+
+/// Vart QR-koden pekar: LAN (samma Wi-Fi) eller en publik Firebase Hosting-URL.
+enum JoinMode { lan, hosting }
 
 /// Väntrummet: visar rumskoden, en QR-kod att dela, och anslutna spelare.
 /// Värdens telefon startar en LAN-webbserver så andra kan gå med via webben.
@@ -21,6 +25,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
   bool _starting = false;
   String? _serverUrl;
   String? _serverError;
+  JoinMode _mode = JoinMode.lan;
+
+  String get _hostingUrl => (dotenv.env['HOSTING_URL'] ?? '').trim();
+  bool get _hostingConfigured => _hostingUrl.isNotEmpty;
 
   Future<void> _ensureServer() async {
     if (_starting || _serverUrl != null) return;
@@ -40,8 +48,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final controller = context.watch<GameController>();
     final room = controller.room;
 
-    // Värden startar LAN-servern så snart vi vet att vi är värd.
-    if (controller.isHost) {
+    // Värden startar LAN-servern bara när LAN-läget är valt.
+    if (controller.isHost && _mode == JoinMode.lan) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _ensureServer());
     }
 
@@ -71,8 +79,15 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
 
     final players = room.players.values.toList();
-    final joinUrl =
-        _serverUrl == null ? null : '$_serverUrl/?code=${room.code}';
+
+    // QR-mål beroende på valt läge.
+    String? joinUrl;
+    if (_mode == JoinMode.lan) {
+      joinUrl = _serverUrl == null ? null : '$_serverUrl/?code=${room.code}';
+    } else if (_hostingConfigured) {
+      final base = _hostingUrl.replaceAll(RegExp(r'/+$'), '');
+      joinUrl = '$base/?code=${room.code}';
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Väntrum')),
@@ -100,7 +115,14 @@ class _LobbyScreenState extends State<LobbyScreen> {
               ]),
             ],
             const SizedBox(height: 16),
-            if (controller.isHost) _ShareCard(joinUrl: joinUrl, error: _serverError),
+            if (controller.isHost)
+              _ShareCard(
+                joinUrl: joinUrl,
+                error: _mode == JoinMode.lan ? _serverError : null,
+                mode: _mode,
+                hostingConfigured: _hostingConfigured,
+                onModeChanged: (m) => setState(() => _mode = m),
+              ),
             const SizedBox(height: 16),
             Text('Spelare (${players.length})',
                 style: Theme.of(context).textTheme.titleMedium),
@@ -204,14 +226,28 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 }
 
-/// Kort som visar QR-koden (och en dela-knapp) till LAN-webbklienten.
+/// Kort som visar QR-koden (och en dela-knapp) till webbklienten.
+/// Värden kan välja om QR:en pekar på LAN-adressen eller en Hosting-URL.
 class _ShareCard extends StatelessWidget {
   final String? joinUrl;
   final String? error;
-  const _ShareCard({required this.joinUrl, required this.error});
+  final JoinMode mode;
+  final bool hostingConfigured;
+  final ValueChanged<JoinMode> onModeChanged;
+
+  const _ShareCard({
+    required this.joinUrl,
+    required this.error,
+    required this.mode,
+    required this.hostingConfigured,
+    required this.onModeChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final desc = mode == JoinMode.lan
+        ? 'Skanna QR-koden med en enhet på samma Wi-Fi.'
+        : 'Skanna QR-koden — funkar var som helst (på distans).';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -219,12 +255,31 @@ class _ShareCard extends StatelessWidget {
           children: [
             Text('Låt andra gå med',
                 style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 4),
-            const Text(
-              'Skanna QR-koden med en telefon eller dator på samma Wi-Fi.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12),
-            ),
+            const SizedBox(height: 8),
+            // Välj vart QR:en pekar. Hosting visas bara om HOSTING_URL är satt.
+            if (hostingConfigured)
+              SegmentedButton<JoinMode>(
+                segments: const [
+                  ButtonSegment(
+                      value: JoinMode.lan,
+                      icon: Icon(Icons.wifi),
+                      label: Text('Samma rum')),
+                  ButtonSegment(
+                      value: JoinMode.hosting,
+                      icon: Icon(Icons.public),
+                      label: Text('På distans')),
+                ],
+                selected: {mode},
+                onSelectionChanged: (s) => onModeChanged(s.first),
+              )
+            else
+              const Text(
+                '💡 Sätt HOSTING_URL i .env för att kunna dela en distanslänk.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 11),
+              ),
+            const SizedBox(height: 8),
+            Text(desc, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 12),
             if (error != null)
               Text(error!,

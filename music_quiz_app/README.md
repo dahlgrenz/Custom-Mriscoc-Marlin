@@ -118,6 +118,20 @@ Wi-Fi — iPhone, Android, dator — skannar den, öppnar webbklienten
    (samma projekt som mobilappen).
 2. Klart — `web_client/` buntas som assets och serveras automatiskt av värden.
 
+### Samma rum (LAN) eller på distans (Firebase Hosting)
+Värden kan i väntrummet välja vart QR-koden pekar:
+- **Samma rum:** `http://<telefonens-ip>:8080/?code=…` — enheter på samma Wi-Fi.
+- **På distans:** en publik Hosting-URL — funkar var som helst, över https.
+
+För distansläget: sätt `HOSTING_URL` i `.env` (t.ex. `https://ditt-projekt.web.app`)
+och deploya webbklienten en gång:
+```bash
+npm i -g firebase-tools
+firebase login
+cd music_quiz_app && firebase deploy --only hosting   # använder firebase.json → public: web_client
+```
+Är `HOSTING_URL` tom visas bara LAN-läget.
+
 ## Spelregler (fas 1)
 1. Värden skapar ett rum och väljer en spellista + mål-antal kort (t.ex. 10).
 2. Spelare ansluter med rumskoden. Alla loggar in på Spotify.

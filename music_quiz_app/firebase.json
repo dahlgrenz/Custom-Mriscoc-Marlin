@@ -1,0 +1,7 @@
+{
+  "hosting": {
+    "public": "web_client",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "README.md"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  }
+}
