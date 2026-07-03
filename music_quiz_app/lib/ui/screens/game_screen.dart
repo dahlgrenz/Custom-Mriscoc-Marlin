@@ -380,7 +380,20 @@ class _YearPicker extends StatefulWidget {
 class _YearPickerState extends State<_YearPicker> {
   static final int _maxYear = DateTime.now().year;
   static const int _minYear = 1950;
-  double _year = ((1950 + 2010) / 2).roundToDouble();
+
+  int? _decade; // valt årtionde (null = inte valt än)
+  int? _year; // valt år inom årtiondet
+
+  List<int> get _decades {
+    final maxDecade = _maxYear - (_maxYear % 10);
+    return [for (var d = _minYear; d <= maxDecade; d += 10) d];
+  }
+
+  List<int> get _years {
+    final start = _decade!;
+    final end = (start + 9) > _maxYear ? _maxYear : start + 9;
+    return [for (var y = start; y <= end; y++) y];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -389,28 +402,70 @@ class _YearPickerState extends State<_YearPicker> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('${_year.round()}',
-                style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary)),
-            Slider(
-              value: _year.clamp(_minYear.toDouble(), _maxYear.toDouble()),
-              min: _minYear.toDouble(),
-              max: _maxYear.toDouble(),
-              divisions: _maxYear - _minYear,
-              label: '${_year.round()}',
-              onChanged: (v) => setState(() => _year = v),
-            ),
-            const SizedBox(height: 4),
-            const Text('5 p för exakt • 3 p för 1–2 år • 1 p för 3–5 år',
-                style: TextStyle(fontSize: 12)),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: () => widget.onGuess(_year.round()),
-              icon: const Icon(Icons.check),
-              label: const Text('Gissa'),
-            ),
+            const Text('5 p exakt • 3 p 1–2 år • 1 p 3–5 år',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 12),
+            if (_decade == null) ...[
+              Text('Välj årtionde',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final d in _decades)
+                    ChoiceChip(
+                      label: Text('$d-tal'),
+                      selected: false,
+                      onSelected: (_) => setState(() {
+                        _decade = d;
+                        _year = null;
+                      }),
+                    ),
+                ],
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Byt årtionde',
+                    onPressed: () => setState(() {
+                      _decade = null;
+                      _year = null;
+                    }),
+                  ),
+                  Expanded(
+                    child: Text('$_decade-tal — välj år',
+                        style: Theme.of(context).textTheme.titleSmall),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final y in _years)
+                    ChoiceChip(
+                      label: Text('$y'),
+                      selected: _year == y,
+                      onSelected: (_) => setState(() => _year = y),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _year == null ? null : () => widget.onGuess(_year!),
+                icon: const Icon(Icons.check),
+                label: Text(_year == null ? 'Välj ett år' : 'Gissa $_year'),
+              ),
+            ],
           ],
         ),
       ),

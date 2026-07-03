@@ -36,7 +36,8 @@ const state = {
   avatar: pick(AVATARS),
   joined: false,
   room: null,
-  yearGuess: 1990,
+  yearDecade: null, // valt årtionde i årtalsläget
+  yearGuess: null, // valt år
   banner: null, // { ok: bool, text }
   error: null,
 };
@@ -191,6 +192,9 @@ async function submitYearGuess(year) {
 
   const points = yearGuessPoints(round.track.year, year);
   const myTimeline = timelineOf(me);
+  // Nollställ valet inför nästa tur.
+  state.yearDecade = null;
+  state.yearGuess = null;
   await advanceTurn(
     room,
     round,
@@ -370,13 +374,7 @@ function renderGame(room) {
   // Åtgärdsyta beroende på läge.
   let actionHtml = "";
   if (isYear && canAct) {
-    actionHtml = `
-      <div class="card">
-        <div class="muted">5 p exakt • 3 p 1–2 år • 1 p 3–5 år</div>
-        <div id="yearval" style="font-size:2.2rem;text-align:center;font-weight:700">${state.yearGuess}</div>
-        <input id="yearslider" type="range" min="1950" max="${MAX_YEAR}" value="${state.yearGuess}" style="width:100%" />
-        <button id="guess">Gissa</button>
-      </div>`;
+    actionHtml = yearPickerHtml();
   } else if (!isYear) {
     // Tidslinje med placeringsknappar (bara när det är min tur).
     for (let i = 0; i <= myTimeline.length; i++) {
@@ -416,13 +414,7 @@ function renderGame(room) {
   `);
 
   if (isYear && canAct) {
-    const slider = document.getElementById("yearslider");
-    slider.oninput = (e) => {
-      state.yearGuess = Number(e.target.value);
-      document.getElementById("yearval").textContent = state.yearGuess;
-    };
-    document.getElementById("guess").onclick = () =>
-      submitYearGuess(state.yearGuess).catch((e) => setError("" + e));
+    wireYearPicker();
   } else if (!isYear && canAct) {
     appEl.querySelectorAll(".place-btn").forEach((el) => {
       el.onclick = () =>
@@ -438,6 +430,61 @@ function cardHtml(t) {
       <div><div><b>${esc(t.title)}</b></div>
       <div class="muted">${esc(t.artist)}</div></div>
     </div>`;
+}
+
+// Tvåstegs årtalsväljare: först årtionde, sedan år.
+function yearPickerHtml() {
+  const info = `<div class="muted">5 p exakt • 3 p 1–2 år • 1 p 3–5 år</div>`;
+  if (state.yearDecade == null) {
+    const maxDec = MAX_YEAR - (MAX_YEAR % 10);
+    let chips = "";
+    for (let d = 1950; d <= maxDec; d += 10)
+      chips += `<button class="chip" data-dec="${d}">${d}-tal</button>`;
+    return `<div class="card">${info}<p>Välj årtionde</p><div class="chips">${chips}</div></div>`;
+  }
+  const end = Math.min(state.yearDecade + 9, MAX_YEAR);
+  let chips = "";
+  for (let y = state.yearDecade; y <= end; y++)
+    chips += `<button class="chip ${state.yearGuess === y ? "sel" : ""}" data-year="${y}">${y}</button>`;
+  const ready =
+    state.yearGuess != null &&
+    state.yearGuess >= state.yearDecade &&
+    state.yearGuess <= end;
+  return `<div class="card">${info}
+    <button class="secondary" id="decback">← Byt årtionde</button>
+    <p>${state.yearDecade}-tal — välj år</p>
+    <div class="chips">${chips}</div>
+    <button id="guess" ${ready ? "" : "disabled"}>${ready ? "Gissa " + state.yearGuess : "Välj ett år"}</button>
+  </div>`;
+}
+
+function wireYearPicker() {
+  if (state.yearDecade == null) {
+    appEl.querySelectorAll("[data-dec]").forEach((el) => {
+      el.onclick = () => {
+        state.yearDecade = Number(el.dataset.dec);
+        state.yearGuess = null;
+        render();
+      };
+    });
+    return;
+  }
+  const back = document.getElementById("decback");
+  if (back)
+    back.onclick = () => {
+      state.yearDecade = null;
+      state.yearGuess = null;
+      render();
+    };
+  appEl.querySelectorAll("[data-year]").forEach((el) => {
+    el.onclick = () => {
+      state.yearGuess = Number(el.dataset.year);
+      render();
+    };
+  });
+  const g = document.getElementById("guess");
+  if (g && !g.disabled)
+    g.onclick = () => submitYearGuess(state.yearGuess).catch((e) => setError("" + e));
 }
 
 function renderFinished(room) {

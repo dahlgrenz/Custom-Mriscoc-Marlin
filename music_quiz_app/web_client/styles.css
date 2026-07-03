@@ -109,7 +109,13 @@ button:disabled { opacity: 0.5; cursor: default; }
 .lb-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-row .val { font-weight: 700; }
 
-input[type="range"] { width: 100%; accent-color: var(--primary); margin: 12px 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.chip {
+  width: auto; margin: 0; padding: 10px 14px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--surface-2); border-radius: 20px; font-weight: 600;
+}
+.chip.sel { background: var(--primary); color: #06210f; border-color: var(--primary); }
 
 .spinner {
   width: 36px; height: 36px; border-radius: 50%;
