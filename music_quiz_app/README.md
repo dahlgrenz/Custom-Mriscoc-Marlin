@@ -171,6 +171,11 @@ cd music_quiz_app && firebase deploy --only hosting   # använder firebase.json 
   direkt från Spotify, plus kuraterade taggar (Melodifestivalen, land,
   placering) via `tag_data/*.csv` (`services/tag_repository.dart`). Live-räknare
   "X av Y låtar matchar" i lobbyn.
+- [x] Handikapp & statistik: värden kan ge en riktigt duktig spelare minuspoäng
+  (lobbyn); resultatskärmen visar slutställning **med** och **utan** handikapp
+  plus kul statistik (flest fullpott, flest ettor, flest stölder, flest missar).
+- [x] Lämna spel: spelare kan lämna när som helst; frånvarande spelares turer
+  hoppas över och om värden lämnar avslutas matchen.
 - [ ] Fas 5: iOS-polish, App Store / Play Store-publicering.
 
 ### Steal-mekaniken

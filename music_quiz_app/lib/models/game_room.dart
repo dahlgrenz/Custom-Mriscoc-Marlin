@@ -82,14 +82,26 @@ class GameRoom {
   String? get activePlayerId =>
       turnOrder.isEmpty ? null : turnOrder[turnIndex % turnOrder.length];
 
-  /// Rankvärde för leaderboard/vinnare: poäng i årtalsläge, annars antal kort.
-  int rankValue(Player p) =>
+  /// Grundvärde utan handikapp: poäng i årtalsläge, annars antal kort.
+  int baseValue(Player p) =>
       mode == GameMode.year ? p.score : p.timeline.length;
 
-  /// Spelarna sorterade från ledare till sist.
+  /// Rankvärde med handikapp (minuspoäng) inräknat — det som avgör placeringen.
+  int rankValue(Player p) => baseValue(p) - p.handicap;
+
+  bool get anyHandicap => players.values.any((p) => p.handicap != 0);
+
+  /// Slutställning (med handikapp) — ledare först.
   List<Player> get ranking {
     final list = players.values.toList()
       ..sort((a, b) => rankValue(b).compareTo(rankValue(a)));
+    return list;
+  }
+
+  /// Ställning utan handikapp (rå prestation) — ledare först.
+  List<Player> get rankingRaw {
+    final list = players.values.toList()
+      ..sort((a, b) => baseValue(b).compareTo(baseValue(a)));
     return list;
   }
 

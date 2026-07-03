@@ -44,6 +44,31 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  Future<void> _setHandicap(BuildContext context, GameController controller,
+      String playerId, String name, int current) async {
+    final value = await showDialog<int>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: Text('Handikapp för $name'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Text('Dra av minuspoäng för en riktigt duktig spelare.',
+                style: TextStyle(fontSize: 12)),
+          ),
+          for (final v in const [0, 1, 2, 3, 5])
+            RadioListTile<int>(
+              value: v,
+              groupValue: current,
+              title: Text(v == 0 ? 'Inget handikapp' : '−$v poäng'),
+              onChanged: (x) => Navigator.pop(context, x),
+            ),
+        ],
+      ),
+    );
+    if (value != null) controller.setHandicap(playerId, value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<GameController>();
@@ -91,7 +116,21 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Väntrum')),
+      appBar: AppBar(
+        title: const Text('Väntrum'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Lämna',
+            onPressed: () async {
+              await controller.leaveGame();
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -134,15 +173,28 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (_, i) {
                   final p = players[i];
-                  final isHost = p.id == room.hostId;
+                  final isHostRow = p.id == room.hostId;
                   return ListTile(
                     leading: CircleAvatar(
                       child:
                           Text(p.avatar, style: const TextStyle(fontSize: 20)),
                     ),
                     title: Text(p.name),
-                    trailing:
-                        isHost ? const Chip(label: Text('Värd')) : null,
+                    subtitle: p.handicap > 0
+                        ? Text('Handikapp: −${p.handicap} p',
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error))
+                        : null,
+                    trailing: isHostRow
+                        ? const Chip(label: Text('Värd'))
+                        : (controller.isHost
+                            ? const Icon(Icons.tune, size: 18)
+                            : null),
+                    // Värden kan ge en spelare handikapp (minuspoäng).
+                    onTap: controller.isHost
+                        ? () => _setHandicap(context, controller, p.id, p.name,
+                            p.handicap)
+                        : null,
                   );
                 },
               ),

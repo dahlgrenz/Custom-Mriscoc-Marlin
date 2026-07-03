@@ -12,23 +12,43 @@ class Leaderboard extends StatelessWidget {
   /// Kompakt = en rad högst upp i spelet; annars full lista (t.ex. resultat).
   final bool compact;
 
+  /// true = ställning UTAN handikapp (rå prestation); annars med handikapp.
+  final bool raw;
+
   const Leaderboard({
     super.key,
     required this.room,
     this.myId,
     this.compact = false,
+    this.raw = false,
   });
 
   static const _medals = ['🥇', '🥈', '🥉'];
+
+  int _value(Player p) => raw ? room.baseValue(p) : room.rankValue(p);
+  List<Player> get _list => raw ? room.rankingRaw : room.ranking;
 
   String _unit(int value) =>
       room.mode == GameMode.year ? '$value p' : '$value kort';
 
   @override
   Widget build(BuildContext context) {
-    final ranking = room.ranking;
+    final ranking = _list;
     if (compact) return _compact(context, ranking);
-    return _full(context, ranking);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < ranking.length; i++)
+          _Row(
+            rank: i,
+            player: ranking[i],
+            value: _unit(_value(ranking[i])),
+            handicap: raw ? 0 : ranking[i].handicap,
+            isMe: ranking[i].id == myId,
+            medal: i < 3 ? _medals[i] : null,
+          ),
+      ],
+    );
   }
 
   Widget _compact(BuildContext context, List<Player> ranking) {
@@ -41,29 +61,13 @@ class Leaderboard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Chip(
                 visualDensity: VisualDensity.compact,
-                avatar: Text(i < 3 ? _medals[i] : '${ranking[i].avatar}',
+                avatar: Text(i < 3 ? _medals[i] : ranking[i].avatar,
                     style: const TextStyle(fontSize: 16)),
-                label: Text('${ranking[i].name} · ${_unit(room.rankValue(ranking[i]))}'),
+                label: Text('${ranking[i].name} · ${_unit(_value(ranking[i]))}'),
               ),
             ),
         ],
       ),
-    );
-  }
-
-  Widget _full(BuildContext context, List<Player> ranking) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < ranking.length; i++)
-          _Row(
-            rank: i,
-            player: ranking[i],
-            value: _unit(room.rankValue(ranking[i])),
-            isMe: ranking[i].id == myId,
-            medal: i < 3 ? _medals[i] : null,
-          ),
-      ],
     );
   }
 }
@@ -72,6 +76,7 @@ class _Row extends StatelessWidget {
   final int rank;
   final Player player;
   final String value;
+  final int handicap;
   final bool isMe;
   final String? medal;
 
@@ -79,6 +84,7 @@ class _Row extends StatelessWidget {
     required this.rank,
     required this.player,
     required this.value,
+    required this.handicap,
     required this.isMe,
     required this.medal,
   });
@@ -86,7 +92,6 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Animerad rad så att omflyttningar efter varje omgång känns levande.
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
@@ -121,6 +126,12 @@ class _Row extends StatelessWidget {
                   fontWeight: rank == 0 ? FontWeight.bold : FontWeight.normal),
             ),
           ),
+          if (handicap != 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text('−$handicap',
+                  style: TextStyle(color: scheme.error, fontSize: 12)),
+            ),
           Text(value,
               style: Theme.of(context)
                   .textTheme

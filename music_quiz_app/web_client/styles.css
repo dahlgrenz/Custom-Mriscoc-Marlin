@@ -108,6 +108,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .lb-row .a { font-size: 22px; }
 .lb-row .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-row .val { font-weight: 700; }
+.lb-row .hc { color: var(--error); font-size: 12px; margin-right: 8px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .chip {

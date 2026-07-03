@@ -169,13 +169,43 @@ class GameRepository {
     required int nextTurnIndex,
     required GameRound nextRound,
   }) async {
+    final id = updatedActivePlayer.id;
     await _room(code).update({
-      'players/${updatedActivePlayer.id}/timeline': _timelineMap(updatedActivePlayer.timeline),
-      'players/${updatedActivePlayer.id}/score': updatedActivePlayer.score,
+      'players/$id/timeline': _timelineMap(updatedActivePlayer.timeline),
+      'players/$id/score': updatedActivePlayer.score,
+      'players/$id/stats': updatedActivePlayer.stats.toJson(),
       'turnIndex': nextTurnIndex,
       'currentRound': nextRound.toJson(),
     });
   }
+
+  /// Bara turövergång (ingen spelaruppdatering) — t.ex. när en frånvarande
+  /// spelares tur hoppas över.
+  Future<void> advanceOnly({
+    required String code,
+    required int nextTurnIndex,
+    required GameRound nextRound,
+  }) =>
+      _room(code).update({
+        'turnIndex': nextTurnIndex,
+        'currentRound': nextRound.toJson(),
+      });
+
+  /// Värden sätter en spelares handikapp (minuspoäng).
+  Future<void> setHandicap({
+    required String code,
+    required String playerId,
+    required int handicap,
+  }) =>
+      _room(code).child('players/$playerId/handicap').set(handicap);
+
+  /// Skriver bara en spelares statistik (t.ex. en miss utan turövergång).
+  Future<void> updatePlayerStats({
+    required String code,
+    required String playerId,
+    required PlayerStats stats,
+  }) =>
+      _room(code).child('players/$playerId/stats').set(stats.toJson());
 
   Future<void> finishGame(String code) =>
       _room(code).child('status').set(RoomStatus.finished.name);

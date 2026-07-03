@@ -13,6 +13,7 @@ import {
   onValue,
   update,
   get,
+  remove,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -73,14 +74,57 @@ function actorId(round) {
     : round.activePlayerId;
 }
 
-function rankValue(room, p) {
+function baseValue(room, p) {
   return room.mode === "year" ? p.score || 0 : timelineOf(p).length;
+}
+
+function rankValue(room, p) {
+  return baseValue(room, p) - (p.handicap || 0);
 }
 
 function ranking(room) {
   return Object.values(room.players || {}).sort(
     (a, b) => rankValue(room, b) - rankValue(room, a)
   );
+}
+
+function rankingRaw(room) {
+  return Object.values(room.players || {}).sort(
+    (a, b) => baseValue(room, b) - baseValue(room, a)
+  );
+}
+
+function anyHandicap(room) {
+  return Object.values(room.players || {}).some((p) => (p.handicap || 0) !== 0);
+}
+
+// Stat-hjälpare: returnerar spelarens stats med default 0, och en kopia med +1.
+function statsOf(p) {
+  const s = p.stats || {};
+  return {
+    perfect: s.perfect || 0,
+    threes: s.threes || 0,
+    ones: s.ones || 0,
+    misses: s.misses || 0,
+    steals: s.steals || 0,
+  };
+}
+function bump(stats, ...keys) {
+  const out = { ...stats };
+  for (const k of keys) out[k] = (out[k] || 0) + 1;
+  return out;
+}
+
+// Nästa tur (index, id) där spelaren fortfarande är kvar — hoppar över dem som lämnat.
+function nextPresentTurn(room) {
+  const order = room.turnOrder || [];
+  if (!order.length) return null;
+  for (let step = 1; step <= order.length; step++) {
+    const idx = room.turnIndex + step;
+    const id = order[idx % order.length];
+    if (room.players && room.players[id]) return [idx, id];
+  }
+  return null;
 }
 
 // ---- Spellogik (spegel av Dart-sidans Scoring) --------------------------
@@ -153,30 +197,35 @@ async function placeCurrentTrack(position) {
 
   const myTimeline = timelineOf(me);
   const correct = isCorrectPlacement(myTimeline, round.track, position);
+  const stats = statsOf(me);
 
   if (round.phase === "guessing") {
     if (correct) {
-      await advanceTurn(room, round, insertSorted(myTimeline, round.track), (me.score || 0) + 1);
+      await advanceTurn(room, round, insertSorted(myTimeline, round.track),
+        (me.score || 0) + 1, bump(stats, "perfect"));
       showBanner(true, "Rätt! Kortet är ditt 🎉");
     } else {
-      // Fel → nästa spelare får stjäla.
-      const turnOrder = room.turnOrder || [];
-      const stealer = turnOrder[(room.turnIndex + 1) % turnOrder.length];
+      // Fel → nästa spelare (som är kvar) får stjäla.
+      const next = nextPresentTurn(room);
+      const stealer = next ? next[1] : round.activePlayerId;
       await update(ref(db, `rooms/${state.code}/currentRound`), {
         track: round.track,
         activePlayerId: round.activePlayerId,
         phase: "stealing",
         stealerId: stealer,
       });
+      await update(ref(db, `rooms/${state.code}/players/${state.uid}/stats`),
+        bump(stats, "misses"));
       showBanner(false, "Fel plats! Nästa spelare får chansen att stjäla.");
     }
   } else {
     // Steal-fas: jag är utmanaren.
     if (correct) {
-      await advanceTurn(room, round, insertSorted(myTimeline, round.track), (me.score || 0) + 1);
+      await advanceTurn(room, round, insertSorted(myTimeline, round.track),
+        (me.score || 0) + 1, bump(stats, "perfect", "steals"));
       showBanner(true, "Stöld! Du snodde kortet 😎");
     } else {
-      await advanceTurn(room, round, myTimeline, me.score || 0);
+      await advanceTurn(room, round, myTimeline, me.score || 0, bump(stats, "misses"));
       showBanner(false, "Missade stölden — kortet försvinner.");
     }
   }
@@ -192,6 +241,12 @@ async function submitYearGuess(year) {
 
   const points = yearGuessPoints(round.track.year, year);
   const myTimeline = timelineOf(me);
+  const s = statsOf(me);
+  const newStats =
+    points === 5 ? bump(s, "perfect")
+    : points === 3 ? bump(s, "threes")
+    : points === 1 ? bump(s, "ones")
+    : bump(s, "misses");
   // Nollställ valet inför nästa tur.
   state.yearDecade = null;
   state.yearGuess = null;
@@ -199,7 +254,8 @@ async function submitYearGuess(year) {
     room,
     round,
     insertSorted(myTimeline, round.track),
-    (me.score || 0) + points
+    (me.score || 0) + points,
+    newStats
   );
   const actual = round.track.year;
   const msg =
@@ -213,16 +269,20 @@ async function submitYearGuess(year) {
   showBanner(points > 0, msg);
 }
 
-async function advanceTurn(room, round, newTimeline, newScore) {
-  const turnOrder = room.turnOrder || [];
+async function advanceTurn(room, round, newTimeline, newScore, newStats) {
   const deck = deckOf(room);
-  const nextTurnIndex = room.turnIndex + 1;
-  const nextActive = turnOrder[nextTurnIndex % turnOrder.length];
+  const next = nextPresentTurn(room);
+  if (!next) {
+    await update(ref(db, `rooms/${state.code}`), { status: "finished" });
+    return;
+  }
+  const [nextTurnIndex, nextActive] = next;
   const nextTrack = deck.length ? deck[nextTurnIndex % deck.length] : round.track;
 
   await update(ref(db, `rooms/${state.code}`), {
     [`players/${state.uid}/timeline`]: arrayToMap(newTimeline),
     [`players/${state.uid}/score`]: newScore,
+    [`players/${state.uid}/stats`]: newStats || statsOf(me()),
     turnIndex: nextTurnIndex,
     currentRound: {
       track: nextTrack,
@@ -239,6 +299,20 @@ async function advanceTurn(room, round, newTimeline, newScore) {
   if (reached) {
     await update(ref(db, `rooms/${state.code}`), { status: "finished" });
   }
+}
+
+function me() {
+  return (state.room && state.room.players && state.room.players[state.uid]) || {};
+}
+
+// Lämna spelet: ta bort mig ur rummet och gå tillbaka till anslutningsvyn.
+async function leaveGame() {
+  try {
+    await remove(ref(db, `rooms/${state.code}/players/${state.uid}`));
+  } catch (_) {}
+  state.joined = false;
+  state.room = null;
+  render();
 }
 
 // ---- UI-hjälpare --------------------------------------------------------
@@ -331,24 +405,34 @@ function renderLobby(room) {
   }</p>
     <div class="card">${playerRows(room)}</div>
     <p class="muted center">Väntar på att värden startar spelet…</p>
+    <button class="secondary" id="leave">Lämna</button>
   `);
+  wireLeave();
+}
+
+function wireLeave() {
+  const b = document.getElementById("leave");
+  if (b) b.onclick = () => leaveGame();
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-function leaderboardHtml(room) {
-  const rows = ranking(room)
+function leaderboardHtml(room, raw = false) {
+  const list = raw ? rankingRaw(room) : ranking(room);
+  const rows = list
     .map((p, i) => {
-      const val =
-        room.mode === "year"
-          ? `${p.score || 0} p`
-          : `${timelineOf(p).length} kort`;
+      const v = raw ? baseValue(room, p) : rankValue(room, p);
+      const val = room.mode === "year" ? `${v} p` : `${v} kort`;
+      const hc =
+        !raw && (p.handicap || 0) > 0
+          ? `<span class="hc">−${p.handicap}</span>`
+          : "";
       const cls = `lb-row${i === 0 ? " lead" : ""}${p.id === state.uid ? " me" : ""}`;
       return `<div class="${cls}">
         <span class="rank">${i < 3 ? MEDALS[i] : i + 1}</span>
         <span class="a">${esc(p.avatar || "🎧")}</span>
         <span class="nm">${esc(p.name)}${p.id === state.uid ? " (du)" : ""}</span>
-        <span class="val">${val}</span>
+        ${hc}<span class="val">${val}</span>
       </div>`;
     })
     .join("");
@@ -411,7 +495,9 @@ function renderGame(room) {
     </div>
     ${isYear ? actionHtml : `<h3 style="margin-top:20px">Din tidslinje</h3>${actionHtml || `<p class="muted">Inga kort än.</p>`}`}
     ${isYear ? boardHtml : ""}
+    <button class="secondary" id="leave" style="margin-top:24px">Lämna spel</button>
   `);
+  wireLeave();
 
   if (isYear && canAct) {
     wireYearPicker();
@@ -487,16 +573,49 @@ function wireYearPicker() {
     g.onclick = () => submitYearGuess(state.yearGuess).catch((e) => setError("" + e));
 }
 
+function statLineHtml(room, emoji, label, key) {
+  let top = null;
+  let best = 0;
+  for (const p of Object.values(room.players || {})) {
+    const v = (p.stats || {})[key] || 0;
+    if (v > best) {
+      best = v;
+      top = p;
+    }
+  }
+  if (!top || best <= 0) return "";
+  return `<div class="lb-row">
+    <span class="rank">${emoji}</span>
+    <span class="nm">${esc(label)}</span>
+    <span class="val">${esc(top.avatar || "🎧")} ${esc(top.name)} (${best})</span>
+  </div>`;
+}
+
 function renderFinished(room) {
   const winner = ranking(room)[0];
+  const hc = anyHandicap(room);
+  const isYear = room.mode === "year";
+  let stats = statLineHtml(room, "🎯", "Flest fullpott", "perfect");
+  if (isYear) {
+    stats += statLineHtml(room, "🥈", "Flest treor", "threes");
+    stats += statLineHtml(room, "1️⃣", "Flest ettor", "ones");
+  } else {
+    stats += statLineHtml(room, "😎", "Flest stölder", "steals");
+  }
+  stats += statLineHtml(room, "🙈", "Flest missar", "misses");
   html(`
     <div style="text-align:center">
       <div style="font-size:72px">🏆</div>
       <h1>${winner ? esc(winner.name) : "Ingen"} vann!</h1>
     </div>
-    <h3>Slutställning</h3>
+    <h3>${hc ? "Slutställning (med handikapp)" : "Slutställning"}</h3>
     ${leaderboardHtml(room)}
+    ${hc ? `<h3>Utan handikapp</h3>${leaderboardHtml(room, true)}` : ""}
+    <h3>Kul statistik</h3>
+    ${stats || '<p class="muted">Ingen statistik.</p>'}
+    <button class="secondary" id="leave" style="margin-top:24px">Lämna</button>
   `);
+  wireLeave();
 }
 
 // ---- Start --------------------------------------------------------------

@@ -160,10 +160,18 @@ class GameController extends ChangeNotifier {
       }
     }
 
+    final round = room.currentRound;
+    if (round == null) return;
+
+    // Värden hoppar över en spelare som lämnat mitt i sin tur (annars fastnar spelet).
+    if (isHost && !room.players.containsKey(round.actorId)) {
+      await _skipMissingActor(room, round);
+      return;
+    }
+
     // Värden är "jukebox": spelar rundans låt högt i rummet, oavsett vems tur
     // det är. Andra klienter (t.ex. webbanslutna) behöver då inget eget ljud.
-    final round = room.currentRound;
-    if (isHost && round != null && round.track.id != _lastPlayedTrackId) {
+    if (isHost && round.track.id != _lastPlayedTrackId) {
       _lastPlayedTrackId = round.track.id;
       try {
         await music.play(round.track);
@@ -269,13 +277,14 @@ class GameController extends ChangeNotifier {
           final updated = player.copyWith(
             timeline: Scoring.insertSorted(player.timeline, round.track),
             score: player.score + 1,
+            stats: player.stats.copyWith(perfect: player.stats.perfect + 1),
           );
           await _advanceTurn(room, round, updated);
           await _reportFeedback('Rätt! Kortet är ditt 🎉', good: true);
         } else {
           // Fel gissning → nästa spelare får chansen att stjäla samma låt.
-          final stealer =
-              room.turnOrder[(room.turnIndex + 1) % room.turnOrder.length];
+          final next = _nextPresentTurn(room);
+          final stealer = next?.$2 ?? round.activePlayerId;
           await repo.updateRound(
             code: room.code,
             round: GameRound(
@@ -284,6 +293,11 @@ class GameController extends ChangeNotifier {
               phase: RoundPhase.stealing,
               stealerId: stealer,
             ),
+          );
+          await repo.updatePlayerStats(
+            code: room.code,
+            playerId: player.id,
+            stats: player.stats.copyWith(misses: player.stats.misses + 1),
           );
           await _reportFeedback(
               'Fel plats! Nästa spelare får chansen att stjäla.',
@@ -295,8 +309,14 @@ class GameController extends ChangeNotifier {
             ? player.copyWith(
                 timeline: Scoring.insertSorted(player.timeline, round.track),
                 score: player.score + 1,
+                stats: player.stats.copyWith(
+                  perfect: player.stats.perfect + 1,
+                  steals: player.stats.steals + 1,
+                ),
               )
-            : player;
+            : player.copyWith(
+                stats: player.stats.copyWith(misses: player.stats.misses + 1),
+              );
         await _advanceTurn(room, round, updated);
         await _reportFeedback(
             correct ? 'Stöld! Du snodde kortet 😎' : 'Missade stölden — kortet försvinner.',
@@ -318,9 +338,17 @@ class GameController extends ChangeNotifier {
 
     try {
       final points = Scoring.yearGuessPoints(round.track.year, year);
+      final s = player.stats;
+      final newStats = switch (points) {
+        5 => s.copyWith(perfect: s.perfect + 1),
+        3 => s.copyWith(threes: s.threes + 1),
+        1 => s.copyWith(ones: s.ones + 1),
+        _ => s.copyWith(misses: s.misses + 1),
+      };
       final updated = player.copyWith(
         timeline: Scoring.insertSorted(player.timeline, round.track),
         score: player.score + points,
+        stats: newStats,
       );
       await _advanceTurn(room, round, updated);
       final actual = round.track.year;
@@ -336,11 +364,28 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  /// Nästa tur (index, spelar-id) där spelaren fortfarande är kvar i rummet,
+  /// eller null om ingen är kvar. Hoppar alltså över spelare som lämnat.
+  (int, String)? _nextPresentTurn(GameRoom room) {
+    final order = room.turnOrder;
+    if (order.isEmpty) return null;
+    for (var step = 1; step <= order.length; step++) {
+      final idx = room.turnIndex + step;
+      final id = order[idx % order.length];
+      if (room.players.containsKey(id)) return (idx, id);
+    }
+    return null;
+  }
+
   /// Lämnar över turen och sätter nästa låt. Avslutar spelet vid vinst.
   Future<void> _advanceTurn(
       GameRoom room, GameRound round, Player updatedActor) async {
-    final nextTurnIndex = room.turnIndex + 1;
-    final nextActive = room.turnOrder[nextTurnIndex % room.turnOrder.length];
+    final next = _nextPresentTurn(room);
+    if (next == null) {
+      await repo.finishGame(room.code);
+      return;
+    }
+    final (nextTurnIndex, nextActive) = next;
     final nextTrack =
         _deck.isEmpty ? round.track : _deck[nextTurnIndex % _deck.length];
 
@@ -356,6 +401,55 @@ class GameController extends ChangeNotifier {
         : updatedActor.timeline.length >= room.targetCards;
     if (reached) {
       await repo.finishGame(room.code);
+    }
+  }
+
+  /// Värden hoppar över en spelare som lämnat mitt i sin tur.
+  bool _skipping = false;
+  Future<void> _skipMissingActor(GameRoom room, GameRound round) async {
+    if (_skipping) return;
+    _skipping = true;
+    try {
+      final next = _nextPresentTurn(room);
+      if (next == null) {
+        await repo.finishGame(room.code);
+        return;
+      }
+      final (idx, active) = next;
+      final track = _deck.isEmpty ? round.track : _deck[idx % _deck.length];
+      await repo.advanceOnly(
+        code: room.code,
+        nextTurnIndex: idx,
+        nextRound: GameRound(track: track, activePlayerId: active),
+      );
+    } finally {
+      _skipping = false;
+    }
+  }
+
+  /// Värden sätter en spelares handikapp (minuspoäng).
+  Future<void> setHandicap(String playerId, int handicap) async {
+    final room = _room;
+    if (room == null || !isHost) return;
+    try {
+      await repo.setHandicap(
+          code: room.code, playerId: playerId, handicap: handicap);
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  /// Lämnar spelet. Om värden lämnar under pågående spel avslutas matchen.
+  Future<void> leaveGame() async {
+    final room = _room;
+    if (room == null) return;
+    try {
+      if (isHost && room.status == RoomStatus.playing) {
+        await repo.finishGame(room.code);
+      }
+      await repo.leaveRoom(code: room.code, playerId: myPlayerId);
+    } catch (e) {
+      _setError(e);
     }
   }
 

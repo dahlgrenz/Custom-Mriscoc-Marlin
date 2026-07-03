@@ -65,6 +65,11 @@ class GameScreen extends StatelessWidget {
             tooltip: 'Ställning',
             onPressed: () => _showLeaderboard(context, room, controller.myPlayerId),
           ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Lämna spel',
+            onPressed: () => _confirmLeave(context, controller),
+          ),
         ],
       ),
       body: Column(
@@ -118,6 +123,32 @@ class GameScreen extends StatelessWidget {
     }
     if (c.isStealPhase) return '${c.actorName} försöker stjäla kortet…';
     return isYear ? '${c.actorName} gissar årtalet' : '${c.actorName} spelar';
+  }
+
+  Future<void> _confirmLeave(
+      BuildContext context, GameController controller) async {
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Lämna spelet?'),
+        content: Text(controller.isHost
+            ? 'Du är värd — spelet avslutas för alla om du lämnar.'
+            : 'Du lämnar matchen och kan gå med igen med rumskoden.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Avbryt')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Lämna')),
+        ],
+      ),
+    );
+    if (leave != true) return;
+    await controller.leaveGame();
+    if (context.mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   void _showLeaderboard(BuildContext context, GameRoom room, String myId) {
@@ -530,20 +561,35 @@ class _WinnerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final winner = room.winner;
+    final isYear = room.mode == GameMode.year;
     return Scaffold(
-      appBar: AppBar(title: const Text('Resultat'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+          title: const Text('Resultat'), automaticallyImplyLeading: false),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           const Center(child: Text('🏆', style: TextStyle(fontSize: 72))),
           Center(
             child: Text('${winner?.name ?? "Ingen"} vann!',
-                style: Theme.of(context).textTheme.headlineMedium),
+                style: Theme.of(context).textTheme.headlineMedium,
+                textAlign: TextAlign.center),
           ),
           const SizedBox(height: 24),
-          Text('Slutställning', style: Theme.of(context).textTheme.titleLarge),
+          Text(room.anyHandicap ? 'Slutställning (med handikapp)' : 'Slutställning',
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           Leaderboard(room: room, myId: myId),
+          if (room.anyHandicap) ...[
+            const SizedBox(height: 24),
+            Text('Utan handikapp (rå prestation)',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Leaderboard(room: room, myId: myId, raw: true),
+          ],
+          const SizedBox(height: 24),
+          Text('Kul statistik', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          ..._statLines(context, isYear),
           const SizedBox(height: 32),
           FilledButton(
             onPressed: () =>
@@ -553,5 +599,34 @@ class _WinnerView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<Widget> _statLines(BuildContext context, bool isYear) {
+    final lines = <Widget>[];
+    void add(String emoji, String label, int Function(Player) sel) {
+      final leaders = room.players.values.toList()
+        ..sort((a, b) => sel(b).compareTo(sel(a)));
+      if (leaders.isEmpty || sel(leaders.first) <= 0) return;
+      final top = leaders.first;
+      lines.add(ListTile(
+        dense: true,
+        leading: Text(emoji, style: const TextStyle(fontSize: 22)),
+        title: Text(label),
+        trailing: Text('${top.avatar} ${top.name} (${sel(top)})'),
+      ));
+    }
+
+    add('🎯', 'Flest fullpott', (p) => p.stats.perfect);
+    if (isYear) {
+      add('🥈', 'Flest treor (nära)', (p) => p.stats.threes);
+      add('1️⃣', 'Flest ettor', (p) => p.stats.ones);
+    } else {
+      add('😎', 'Flest stölder', (p) => p.stats.steals);
+    }
+    add('🙈', 'Flest missar', (p) => p.stats.misses);
+    if (lines.isEmpty) {
+      lines.add(const ListTile(dense: true, title: Text('Ingen statistik än.')));
+    }
+    return lines;
   }
 }
