@@ -1,0 +1,35 @@
+# Musikquiz — taggfil för extra statistik som Spotify inte har
+# (t.ex. Melodifestivalen, artistens land, listplacering).
+#
+# ── SÅ HÄR FUNKAR DET ────────────────────────────────────────────────────────
+# En rad = en låt. Appen matchar raden mot låtarna som hämtats från Spotify och
+# hänger på taggarna, så att filtren kan använda dem. Taggarna ändrar INTE
+# Spotifys sökning — de läggs ovanpå de hämtade låtarna.
+#
+# ── SYNTAX ───────────────────────────────────────────────────────────────────
+#  • Rader som börjar med  #  ignoreras (kommentarer).
+#  • Fält separeras med semikolon  ;
+#  • Tre kolumner:  artist ; titel ; taggar
+#      - artist  : artistnamn (matchas skiftlägesokänsligt)
+#      - titel   : låttitel (matchas skiftlägesokänsligt; "feat. …",
+#                  parenteser och skiljetecken ignoreras vid matchning)
+#      - taggar  : kommaseparerade. Två sorter:
+#                    * enkel etikett      →  melodifestivalen, eurovision, vinnare
+#                    * nyckel=värde       →  land=se, ar=2012, placering=1
+#  • Använd vilka nycklar du vill — de blir filtrerbara automatiskt.
+#
+# ── EXEMPEL PÅ FILTER DETTA MÖJLIGGÖR ────────────────────────────────────────
+#    "Bara Melodifestivalen"      → har etiketten  melodifestivalen
+#    "Svenska bidrag"             → land=se
+#    "Vinnare"                    → placering=1   (eller etiketten vinnare)
+#    "Topp 3"                     → placering <= 3
+#    "Melfest på 80-talet"        → melodifestivalen  +  ar mellan 1980–1989
+#
+# ── FYLL PÅ NEDAN (radera exempelraderna när du lagt in egna) ────────────────
+artist;titel;taggar
+Loreen;Euphoria;melodifestivalen,eurovision,land=se,ar=2012,placering=1,vinnare
+Carola;Främling;melodifestivalen,land=se,ar=1983,placering=3
+Herreys;Diggi-Loo Diggi-Ley;melodifestivalen,eurovision,land=se,ar=1984,placering=1,vinnare
+Charlotte Perrelli;Take Me to Your Heaven;melodifestivalen,eurovision,land=se,ar=1999,placering=1,vinnare
+ABBA;Waterloo;eurovision,land=se,ar=1974,placering=1,vinnare
+Måns Zelmerlöw;Heroes;melodifestivalen,eurovision,land=se,ar=2015,placering=1,vinnare
