@@ -45,8 +45,13 @@ Infört som **ledtrådsstil** i klassiskt läge (`clueStyle`): Ljud / Intro / Om
 - 🔴 Vad kommer nästa textrad? / lyrics-lägen (ingen lyrics-API)
 - 🔴 Live eller studio? (ingen tillförlitlig signal)
 
-## Fas 8 — Personliga Spotify-quiz ✅
+## Fas 8 — Personliga Spotify-quiz ✅ *(påbörjad)*
 Kräver fler Spotify-scopes (user-library-read, user-top-read, user-read-recently-played).
+- ✅ **Behörighetsväljare** (klar): på startskärmen kan användaren bocka i allt /
+  inget / vissa av de valfria behörigheterna innan inloggning
+  (`core/spotify_scopes.dart`). Grundbehörigheter (uppspelning + spellistor) krävs
+  alltid. Valet skickas till `SpotifyAuthService.connect(optionalScopes: …)`.
+- ⏳ Kvar: själva de personliga quiz-källorna (gillade/topplistor/nyligen spelade).
 - ✅ **Endast gillade låtar** (`/me/tracks`), sparade album, mina spellistor
 - ✅ **Mina topplåtar / toppartister / toppgenrer** (`/me/top/*`)
 - ✅ **Nyligen spelade** (`/me/player/recently-played`)

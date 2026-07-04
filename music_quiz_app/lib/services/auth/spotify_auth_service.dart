@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:spotify_sdk/spotify_sdk.dart';
 
 import '../../core/app_exception.dart';
+import '../../core/spotify_scopes.dart';
 
 enum SpotifyConnectionState { disconnected, connecting, connected, error }
 
@@ -17,11 +18,15 @@ enum SpotifyConnectionState { disconnected, connecting, connected, error }
 ///  - På Android: appens SHA-1-fingeravtryck registrerat i dashboarden
 ///  - Spotify-appen installerad + Premium på enheten
 class SpotifyAuthService extends ChangeNotifier {
-  static const _scope =
-      'app-remote-control,streaming,playlist-read-private,playlist-read-collaborative';
-
   // Förnya token en stund innan den faktiskt går ut, för marginal.
   static const _tokenLifetime = Duration(minutes: 55);
+
+  /// Valfria behörigheter som användaren valt att ge (utöver grundbehörigheterna).
+  Set<String> _optionalScopes = {};
+  Set<String> get grantedOptionalScopes => _optionalScopes;
+
+  /// Kompletta scope-strängen: alltid grund + användarens valda tillägg.
+  String get _scope => [...kBaseScopes, ..._optionalScopes].join(',');
 
   String get _clientId => dotenv.env['SPOTIFY_CLIENT_ID'] ?? '';
   String get _redirectUri => dotenv.env['SPOTIFY_REDIRECT_URI'] ?? '';
@@ -49,8 +54,10 @@ class SpotifyAuthService extends ChangeNotifier {
   }
 
   /// Kopplar upp mot Spotify-appen och hämtar en access-token för Web API-anrop.
+  /// [optionalScopes] är de valfria behörigheter användaren bockat i.
   /// Returnerar true vid lyckad anslutning.
-  Future<bool> connect() async {
+  Future<bool> connect({Set<String> optionalScopes = const {}}) async {
+    _optionalScopes = optionalScopes;
     if (_clientId.isEmpty || _redirectUri.isEmpty) {
       _setState(SpotifyConnectionState.error,
           error:
@@ -85,7 +92,8 @@ class SpotifyAuthService extends ChangeNotifier {
     if (isConnected && _tokenValid) return _accessToken!;
 
     if (_state != SpotifyConnectionState.connected) {
-      final ok = await connect();
+      // Behåll användarens valda behörigheter vid återanslutning.
+      final ok = await connect(optionalScopes: _optionalScopes);
       if (!ok) throw AppException(_lastError ?? 'Kunde inte ansluta till Spotify.');
       return _accessToken!;
     }

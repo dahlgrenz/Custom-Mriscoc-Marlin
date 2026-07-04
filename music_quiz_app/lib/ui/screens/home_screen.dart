@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/spotify_scopes.dart';
 import '../../game/game_controller.dart';
 import '../../services/auth/spotify_auth_service.dart';
 import '../../services/multiplayer/game_repository.dart';
@@ -26,6 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _avatars = ['🎧', '🎸', '🎤', '🥁', '🎹', '🎺', '🎷', '🎻'];
   String _avatar = _avatars.first;
 
+  // Valfria Spotify-behörigheter — förvalt alla, användaren kan bocka ur.
+  final Set<String> _scopes = {for (final s in kOptionalScopes) s.id};
+
   bool _busy = false;
 
   @override
@@ -39,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _connectSpotify() async {
     final auth = context.read<SpotifyAuthService>();
-    await _run(() => auth.connect());
+    await _run(() => auth.connect(optionalScopes: _scopes));
   }
 
   Future<void> _createRoom() async {
@@ -178,6 +182,51 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              // Behörighetsväljare (går att ändra tills man anslutit).
+              if (!connected)
+                Card(
+                  child: ExpansionTile(
+                    leading: const Icon(Icons.privacy_tip_outlined),
+                    title: const Text('Spotify-behörigheter (valfritt)'),
+                    subtitle: Text(
+                        '${_scopes.length} av ${kOptionalScopes.length} valda'),
+                    childrenPadding: const EdgeInsets.only(bottom: 8),
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => setState(() => _scopes
+                              ..clear()
+                              ..addAll(kOptionalScopes.map((s) => s.id))),
+                            child: const Text('Markera alla'),
+                          ),
+                          TextButton(
+                            onPressed: () => setState(_scopes.clear),
+                            child: const Text('Avmarkera alla'),
+                          ),
+                        ],
+                      ),
+                      for (final s in kOptionalScopes)
+                        CheckboxListTile(
+                          dense: true,
+                          value: _scopes.contains(s.id),
+                          title: Text(s.label),
+                          subtitle: Text(s.description),
+                          onChanged: (v) => setState(() =>
+                              v == true ? _scopes.add(s.id) : _scopes.remove(s.id)),
+                        ),
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: Text(
+                          'Grundläggande (uppspelning + dina spellistor) krävs alltid.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: (_busy || connecting || connected)
                     ? null
