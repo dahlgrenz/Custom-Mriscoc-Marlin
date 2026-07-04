@@ -34,10 +34,12 @@ Grunden för väldigt många lägen nedan. Implementerat: nytt läge **Klassisk*
 - ⏳ Kvar i denna kategori: Alla mot alla / Eliminering / Last Man Standing som
   egna varianter ovanpå frågemotorn.
 
-## Fas 7 — Fler frågetyper ur Spotify-data ✅ / 🟡
-- ✅ **Introtävling** (spela 2–10 s från början via SDK-seek)
-- ✅ **Gissa albumomslag** (bild; suddig/zoomad = klientfilter)
-- ✅ Gissa **år / genre**
+## Fas 7 — Fler frågetyper ur Spotify-data ✅ **KLAR** (delvis)
+Infört som **ledtrådsstil** i klassiskt läge (`clueStyle`): Ljud / Intro / Omslag.
+- ✅ **Introtävling** — spelar bara de första 5 s och pausar sedan.
+- ✅ **Gissa albumomslag** — omslaget visas suddigt och skärps allteftersom
+  tiden går (blur i både app och webb); frågan blir "Vilken artist?".
+- ✅ Gissa **år** (eget läge sedan tidigare)
 - 🟡 Gissa **land** (kräver `tag_data`)
 - 🔴 Refräng / gitarrsolo / trumfill (kräver audio-analys som är borttagen)
 - 🔴 Vad kommer nästa textrad? / lyrics-lägen (ingen lyrics-API)

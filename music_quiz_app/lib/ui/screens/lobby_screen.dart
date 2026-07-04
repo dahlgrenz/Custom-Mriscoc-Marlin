@@ -56,6 +56,12 @@ class _LobbyScreenState extends State<LobbyScreen> {
         GameMode.timeline => const [5, 10, 15],
       };
 
+  String _clueLabel(String style) => switch (style) {
+        'intro' => 'Intro (5 s)',
+        'cover' => 'Albumomslag',
+        _ => 'Ljud',
+      };
+
   String _targetUnit(GameMode m) => switch (m) {
         GameMode.year => 'poäng',
         GameMode.classic => 'frågor',
@@ -268,6 +274,35 @@ class _LobbyScreenState extends State<LobbyScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            // Ledtrådsstil (endast klassiskt läge).
+            if (room.mode == GameMode.classic) ...[
+              Row(
+                children: [
+                  const Icon(Icons.lightbulb_outline, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Ledtråd:', style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(width: 12),
+                  if (controller.isHost)
+                    Expanded(
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: const [
+                          ButtonSegment(value: 'audio', label: Text('Ljud')),
+                          ButtonSegment(value: 'intro', label: Text('Intro')),
+                          ButtonSegment(value: 'cover', label: Text('Omslag')),
+                        ],
+                        selected: {room.clueStyle},
+                        onSelectionChanged: (s) =>
+                            controller.setClueStyle(s.first),
+                      ),
+                    )
+                  else
+                    Text(_clueLabel(room.clueStyle),
+                        style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             // Filter (värden): begränsa vilka låtar som ingår.
             if (controller.isHost) ...[
               OutlinedButton.icon(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -628,6 +629,8 @@ class _ClassicBodyState extends State<_ClassicBody> {
     final revealed = round.revealed;
     final myAnswer = c.myAnswer;
     final scheme = Theme.of(context).colorScheme;
+    final cover = c.room?.clueStyle == 'cover';
+    final art = round.track.albumArtUrl;
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -635,9 +638,17 @@ class _ClassicBodyState extends State<_ClassicBody> {
         Text(round.promptText,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 8),
-        const Text('🔊 Lyssna på värdens telefon',
-            textAlign: TextAlign.center),
+        const SizedBox(height: 12),
+        if (cover && art != null)
+          Center(
+            child: _CoverClue(
+              url: art,
+              // Suddigt först, skarpt vid facit / när tiden runnit ut.
+              blur: revealed ? 0.0 : 24.0 * frac,
+            ),
+          )
+        else
+          const Text('🔊 Lyssna på värdens telefon', textAlign: TextAlign.center),
         const SizedBox(height: 16),
         if (!revealed) ...[
           LinearProgressIndicator(value: frac),
@@ -683,6 +694,34 @@ class _ClassicBodyState extends State<_ClassicBody> {
     }
     if (i == myAnswer) return scheme.primary;
     return null;
+  }
+}
+
+/// Albumomslag som ledtråd — suddigt och skärps allteftersom tiden går.
+class _CoverClue extends StatelessWidget {
+  final String url;
+  final double blur;
+  const _CoverClue({required this.url, required this.blur});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Image.network(
+          url,
+          width: 220,
+          height: 220,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const SizedBox(
+            width: 220,
+            height: 220,
+            child: Icon(Icons.album, size: 80),
+          ),
+        ),
+      ),
+    );
   }
 }
 

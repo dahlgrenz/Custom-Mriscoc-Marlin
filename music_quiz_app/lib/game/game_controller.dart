@@ -78,6 +78,7 @@ class GameController extends ChangeNotifier {
   static const int answerSeconds = 15;
   static const int _answerMs = answerSeconds * 1000;
   static const int revealSeconds = 4;
+  static const int introSeconds = 5;
 
   bool _classicRunning = false;
 
@@ -277,7 +278,10 @@ class GameController extends ChangeNotifier {
           break;
         }
         final track = _deck[(roundNumber - 1) % _deck.length];
-        final q = QuestionGenerator.generate(track, _deck, rnd);
+        final clue = room.clueStyle;
+        // I omslagsläget frågar vi efter artisten (omslaget är ledtråden).
+        final q = QuestionGenerator.generate(track, _deck, rnd,
+            forceType: clue == 'cover' ? 'artist' : null);
 
         await repo.clearAnswers(room.code);
         final deadline = DateTime.now().millisecondsSinceEpoch + _answerMs;
@@ -292,13 +296,25 @@ class GameController extends ChangeNotifier {
             roundNumber: roundNumber,
           ),
         );
-        try {
-          await music.play(track);
-        } catch (e) {
-          _setError(e);
-        }
 
-        await Future.delayed(const Duration(milliseconds: _answerMs + 400));
+        // Ljud: omslagsläget är tyst; annars spelas låten (intro pausas efter 5 s).
+        if (clue != 'cover') {
+          try {
+            await music.play(track);
+          } catch (e) {
+            _setError(e);
+          }
+        }
+        if (clue == 'intro') {
+          await Future.delayed(const Duration(seconds: introSeconds));
+          try {
+            await music.pause();
+          } catch (_) {}
+          await Future.delayed(
+              const Duration(milliseconds: _answerMs - introSeconds * 1000 + 400));
+        } else {
+          await Future.delayed(const Duration(milliseconds: _answerMs + 400));
+        }
         if (!_classicRunning) break;
 
         await _scoreClassicRound(room.code, q, roundNumber, deadline);
@@ -398,6 +414,17 @@ class GameController extends ChangeNotifier {
       await repo.updateMode(code: room.code, mode: m);
       await repo.updateTargetCards(
           code: room.code, target: m == GameMode.year ? 25 : 10);
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  /// Värden byter ledtrådsstil i klassiskt läge (audio/intro/cover).
+  Future<void> setClueStyle(String style) async {
+    final room = _room;
+    if (room == null || !isHost) return;
+    try {
+      await repo.updateClueStyle(code: room.code, style: style);
     } catch (e) {
       _setError(e);
     }

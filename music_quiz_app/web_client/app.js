@@ -392,6 +392,14 @@ function renderClassic(room) {
   const frac = round.deadlineMs ? remaining / totalMs : 0;
   const revealed = !!round.revealed;
   const my = state.classicAnswer;
+  const cover = room.clueStyle === "cover";
+  const art = round.track && round.track.albumArtUrl;
+  const blur = revealed ? 0 : Math.round(24 * frac);
+  const clueHtml =
+    cover && art
+      ? `<div style="text-align:center"><img src="${esc(art)}" alt="omslag"
+           style="width:220px;height:220px;object-fit:cover;border-radius:12px;filter:blur(${blur}px)"/></div>`
+      : `<p class="muted" style="text-align:center">🔊 Lyssna på värdens telefon</p>`;
 
   const opts = round.options
     .map((o, i) => {
@@ -408,7 +416,8 @@ function renderClassic(room) {
   html(`
     ${leaderboardHtml(room)}
     <h2 style="text-align:center">${esc(PROMPTS[round.questionType] || "")}</h2>
-    <p class="muted" style="text-align:center">🔊 Lyssna på värdens telefon · Fråga ${round.roundNumber}/${room.targetCards}</p>
+    ${clueHtml}
+    <p class="muted" style="text-align:center">Fråga ${round.roundNumber}/${room.targetCards}</p>
     ${
       revealed
         ? `<p style="text-align:center;color:#7ee2a0">Rätt svar: ${esc(round.options[round.correctIndex])}</p>`

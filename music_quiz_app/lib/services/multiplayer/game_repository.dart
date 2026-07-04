@@ -86,6 +86,10 @@ class GameRepository {
   Future<void> updateMode({required String code, required GameMode mode}) =>
       _room(code).child('mode').set(mode.name);
 
+  /// Värden byter ledtrådsstil (klassiskt läge): audio | intro | cover.
+  Future<void> updateClueStyle({required String code, required String style}) =>
+      _room(code).child('clueStyle').set(style);
+
   /// Skriver om enbart den nuvarande rundan (används vid steal-övergången).
   Future<void> updateRound({
     required String code,

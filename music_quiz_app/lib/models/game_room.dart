@@ -98,8 +98,14 @@ class GameRoom {
   final RoomStatus status;
   final GameMode mode;
 
-  /// Vinstmål. I [GameMode.timeline] = antal kort; i [GameMode.year] = poäng.
+  /// Vinstmål. I [GameMode.timeline] = antal kort; i [GameMode.year] = poäng;
+  /// i [GameMode.classic] = antal frågor.
   final int targetCards;
+
+  /// Ledtrådsstil i klassiskt läge: "audio" (hela låten), "intro" (bara 5 s),
+  /// eller "cover" (suddigt albumomslag som skärps).
+  final String clueStyle;
+
   final String playlistId;
   final String playlistName;
   final Map<String, Player> players;
@@ -113,6 +119,7 @@ class GameRoom {
     required this.status,
     this.mode = GameMode.timeline,
     required this.targetCards,
+    this.clueStyle = 'audio',
     required this.playlistId,
     this.playlistName = '',
     required this.players,
@@ -155,6 +162,7 @@ class GameRoom {
         'status': status.name,
         'mode': mode.name,
         'targetCards': targetCards,
+        'clueStyle': clueStyle,
         'playlistId': playlistId,
         'playlistName': playlistName,
         'players': {for (final e in players.entries) e.key: e.value.toJson()},
@@ -178,6 +186,7 @@ class GameRoom {
         orElse: () => GameMode.timeline,
       ),
       targetCards: (json['targetCards'] as num?)?.toInt() ?? 10,
+      clueStyle: json['clueStyle'] as String? ?? 'audio',
       playlistId: json['playlistId'] as String? ?? '',
       playlistName: json['playlistName'] as String? ?? '',
       players: {
