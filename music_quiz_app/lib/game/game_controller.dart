@@ -11,6 +11,7 @@ import '../services/multiplayer/game_repository.dart';
 import '../services/music/music_source.dart';
 import '../services/sound_service.dart';
 import '../services/tag_repository.dart';
+import 'question.dart';
 import 'scoring.dart';
 import 'track_filter.dart';
 
@@ -72,6 +73,18 @@ class GameController extends ChangeNotifier {
 
   bool _loadingTracks = false;
   bool get loadingTracks => _loadingTracks;
+
+  // --- Klassiskt läge ---
+  static const int answerSeconds = 15;
+  static const int _answerMs = answerSeconds * 1000;
+  static const int revealSeconds = 4;
+
+  bool _classicRunning = false;
+
+  /// Mitt valda svarsalternativ i den aktuella rundan (null = ej svarat).
+  int? _myAnswer;
+  int? get myAnswer => _myAnswer;
+  int _lastSeenRound = -1;
 
   bool get isHost => _room?.hostId == myPlayerId;
   Player? get me => _room?.players[myPlayerId];
@@ -161,6 +174,17 @@ class GameController extends ChangeNotifier {
     }
 
     final round = room.currentRound;
+
+    // Klassiskt läge: nollställ mitt svar vid ny runda. Uppspelning + poäng
+    // sköts av värdens loop (_runClassicLoop), inte här.
+    if (room.mode == GameMode.classic) {
+      if (round != null && round.roundNumber != _lastSeenRound) {
+        _lastSeenRound = round.roundNumber;
+        _myAnswer = null;
+      }
+      return;
+    }
+
     if (round == null) return;
 
     // Värden hoppar över en spelare som lämnat mitt i sin tur (annars fastnar spelet).
@@ -221,16 +245,136 @@ class GameController extends ChangeNotifier {
             'För få låtar matchar filtret (${filtered.length}). Lätta på filtret.');
       }
       _deck = List<Track>.from(filtered)..shuffle(Random.secure());
-      await repo.startGame(
-        code: room.code,
-        playerIds: room.players.keys.toList(),
-        deck: _deck,
-      );
+      if (room.mode == GameMode.classic) {
+        await repo.startClassicGame(code: room.code, deck: _deck);
+        _runClassicLoop(); // lång loop — inte await:ad
+      } else {
+        await repo.startGame(
+          code: room.code,
+          playerIds: room.players.keys.toList(),
+          deck: _deck,
+        );
+      }
     } catch (e) {
       _setError(e);
     } finally {
       _busy = false;
       notifyListeners();
+    }
+  }
+
+  /// KLASSISKT LÄGE: värden driver rundorna — spelar låten, väntar ut svarstiden,
+  /// poängsätter (rätt + snabbhetsbonus + streak) och visar facit.
+  Future<void> _runClassicLoop() async {
+    if (_classicRunning) return;
+    _classicRunning = true;
+    final rnd = Random.secure();
+    try {
+      final total = _room?.targetCards ?? 10;
+      for (var roundNumber = 1; roundNumber <= total; roundNumber++) {
+        final room = _room;
+        if (room == null || room.status != RoomStatus.playing || _deck.isEmpty) {
+          break;
+        }
+        final track = _deck[(roundNumber - 1) % _deck.length];
+        final q = QuestionGenerator.generate(track, _deck, rnd);
+
+        await repo.clearAnswers(room.code);
+        final deadline = DateTime.now().millisecondsSinceEpoch + _answerMs;
+        await repo.updateRound(
+          code: room.code,
+          round: GameRound(
+            track: track,
+            questionType: q.type,
+            options: q.options,
+            correctIndex: -1, // döljs tills facit
+            deadlineMs: deadline,
+            roundNumber: roundNumber,
+          ),
+        );
+        try {
+          await music.play(track);
+        } catch (e) {
+          _setError(e);
+        }
+
+        await Future.delayed(const Duration(milliseconds: _answerMs + 400));
+        if (!_classicRunning) break;
+
+        await _scoreClassicRound(room.code, q, roundNumber, deadline);
+        await Future.delayed(const Duration(seconds: revealSeconds));
+      }
+      final code = _room?.code;
+      if (code != null) await repo.finishGame(code);
+    } catch (e) {
+      _setError(e);
+    } finally {
+      _classicRunning = false;
+    }
+  }
+
+  Future<void> _scoreClassicRound(
+      String code, QuizQuestion q, int roundNumber, int deadline) async {
+    final room = _room;
+    if (room == null) return;
+    final answers = await repo.readAnswers(code);
+    final updated = <String, Player>{};
+
+    for (final p in room.players.values) {
+      final a = answers[p.id];
+      final correct = a != null && a.choice == q.correctIndex;
+      var points = 0;
+      if (correct) {
+        final remaining = (deadline - a.at).clamp(0, _answerMs);
+        points = 100 + (100 * remaining / _answerMs).round(); // snabbhetsbonus
+      }
+      final newStreak = correct ? p.streak + 1 : 0;
+      final st = p.stats;
+      final newStats = correct
+          ? st.copyWith(
+              perfect: st.perfect + 1,
+              bestStreak: max(st.bestStreak, newStreak))
+          : st.copyWith(misses: st.misses + 1);
+      updated[p.id] =
+          p.copyWith(score: p.score + points, streak: newStreak, stats: newStats);
+    }
+
+    await repo.applyClassicScores(
+      code: code,
+      updated: updated,
+      revealedRound: GameRound(
+        track: room.currentRound?.track ?? _deck[(roundNumber - 1) % _deck.length],
+        questionType: q.type,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        deadlineMs: deadline,
+        revealed: true,
+        roundNumber: roundNumber,
+      ),
+    );
+  }
+
+  /// En spelare skickar sitt svar i klassiskt läge.
+  Future<void> submitAnswer(int choice) async {
+    final room = _room;
+    final round = room?.currentRound;
+    if (room == null || round == null || mode != GameMode.classic) return;
+    if (round.revealed || _myAnswer != null) return;
+    if (round.deadlineMs > 0 &&
+        DateTime.now().millisecondsSinceEpoch > round.deadlineMs) {
+      return;
+    }
+    _myAnswer = choice;
+    notifyListeners();
+    try {
+      await repo.submitAnswer(
+        code: room.code,
+        playerId: myPlayerId,
+        choice: choice,
+        atMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    } catch (e) {
+      _setError(e);
     }
   }
 
@@ -444,6 +588,7 @@ class GameController extends ChangeNotifier {
     final room = _room;
     if (room == null) return;
     try {
+      _classicRunning = false; // stoppa ev. värd-loop
       if (isHost && room.status == RoomStatus.playing) {
         await repo.finishGame(room.code);
       }
@@ -469,6 +614,7 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _classicRunning = false;
     _roomSub?.cancel();
     _playbackSub?.cancel();
     _connectionSub?.cancel();

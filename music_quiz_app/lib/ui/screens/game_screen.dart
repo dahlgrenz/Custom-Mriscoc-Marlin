@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -50,6 +52,39 @@ class GameScreen extends StatelessWidget {
         ));
         controller.clearFeedback();
       });
+    }
+
+    // Klassiskt läge har en helt egen, samtidig layout.
+    if (room.mode == GameMode.classic) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Fråga ${round?.roundNumber ?? 0} / ${room.targetCards}'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.leaderboard),
+              tooltip: 'Ställning',
+              onPressed: () =>
+                  _showLeaderboard(context, room, controller.myPlayerId),
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Lämna spel',
+              onPressed: () => _confirmLeave(context, controller),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            _OfflineBanner(visible: !controller.isOnline),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: Leaderboard(
+                  room: room, myId: controller.myPlayerId, compact: true),
+            ),
+            const Expanded(child: _ClassicBody()),
+          ],
+        ),
+      );
     }
 
     final goal = isYear
@@ -553,6 +588,133 @@ class _CardTile extends StatelessWidget {
   }
 }
 
+/// Klassiskt läge: fråga + 4 alternativ + nedräkning + facit.
+class _ClassicBody extends StatefulWidget {
+  const _ClassicBody();
+
+  @override
+  State<_ClassicBody> createState() => _ClassicBodyState();
+}
+
+class _ClassicBodyState extends State<_ClassicBody> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    // Uppdatera nedräkningen ~4 ggr/sek.
+    _ticker = Timer.periodic(
+        const Duration(milliseconds: 250), (_) => mounted ? setState(() {}) : null);
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<GameController>();
+    final round = c.room?.currentRound;
+    if (round == null || round.options.isEmpty) {
+      return const Center(child: Text('Väntar på nästa fråga…'));
+    }
+
+    const totalMs = GameController.answerSeconds * 1000;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final remainingMs = (round.deadlineMs - now).clamp(0, totalMs);
+    final frac = round.deadlineMs > 0 ? remainingMs / totalMs : 0.0;
+    final revealed = round.revealed;
+    final myAnswer = c.myAnswer;
+    final scheme = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text(round.promptText,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 8),
+        const Text('🔊 Lyssna på värdens telefon',
+            textAlign: TextAlign.center),
+        const SizedBox(height: 16),
+        if (!revealed) ...[
+          LinearProgressIndicator(value: frac),
+          const SizedBox(height: 4),
+          Text('${(remainingMs / 1000).ceil()} s',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge),
+        ] else
+          Text('Rätt svar: ${round.options[round.correctIndex]}',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: Colors.green.shade600)),
+        const SizedBox(height: 16),
+        for (var i = 0; i < round.options.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: _OptionButton(
+              label: round.options[i],
+              color: _optionColor(scheme, i, myAnswer, round.correctIndex, revealed),
+              onTap: (revealed || myAnswer != null)
+                  ? null
+                  : () => c.submitAnswer(i),
+            ),
+          ),
+        if (myAnswer != null && !revealed)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('Svar registrerat — vänta på facit…',
+                textAlign: TextAlign.center),
+          ),
+      ],
+    );
+  }
+
+  Color? _optionColor(ColorScheme scheme, int i, int? myAnswer,
+      int correctIndex, bool revealed) {
+    if (revealed) {
+      if (i == correctIndex) return Colors.green.shade600;
+      if (i == myAnswer) return scheme.error;
+      return null;
+    }
+    if (i == myAnswer) return scheme.primary;
+    return null;
+  }
+}
+
+class _OptionButton extends StatelessWidget {
+  final String label;
+  final Color? color;
+  final VoidCallback? onTap;
+  const _OptionButton({required this.label, this.color, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.tonal(
+        onPressed: onTap,
+        style: color == null
+            ? null
+            : FilledButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: color,
+                disabledForegroundColor: Colors.white,
+              ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(label, textAlign: TextAlign.center),
+        ),
+      ),
+    );
+  }
+}
+
 class _WinnerView extends StatelessWidget {
   final GameRoom room;
   final String myId;
@@ -616,12 +778,14 @@ class _WinnerView extends StatelessWidget {
       ));
     }
 
-    add('🎯', 'Flest fullpott', (p) => p.stats.perfect);
-    if (isYear) {
+    add('🎯', isYear ? 'Flest fullpott' : 'Flest rätt', (p) => p.stats.perfect);
+    if (room.mode == GameMode.year) {
       add('🥈', 'Flest treor (nära)', (p) => p.stats.threes);
       add('1️⃣', 'Flest ettor', (p) => p.stats.ones);
-    } else {
+    } else if (room.mode == GameMode.timeline) {
       add('😎', 'Flest stölder', (p) => p.stats.steals);
+    } else {
+      add('🔥', 'Längsta svit', (p) => p.stats.bestStreak);
     }
     add('🙈', 'Flest missar', (p) => p.stats.misses);
     if (lines.isEmpty) {

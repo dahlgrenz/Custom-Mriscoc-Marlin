@@ -29,7 +29,7 @@ class Leaderboard extends StatelessWidget {
   List<Player> get _list => raw ? room.rankingRaw : room.ranking;
 
   String _unit(int value) =>
-      room.mode == GameMode.year ? '$value p' : '$value kort';
+      room.mode == GameMode.timeline ? '$value kort' : '$value p';
 
   @override
   Widget build(BuildContext context) {

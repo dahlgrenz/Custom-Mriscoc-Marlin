@@ -44,6 +44,24 @@ class _LobbyScreenState extends State<LobbyScreen> {
     }
   }
 
+  String _modeLabel(GameMode m) => switch (m) {
+        GameMode.year => 'Årtal',
+        GameMode.classic => 'Klassisk',
+        GameMode.timeline => 'Tidslinje',
+      };
+
+  List<int> _targetOptions(GameMode m) => switch (m) {
+        GameMode.year => const [15, 25, 40],
+        GameMode.classic => const [10, 15, 20],
+        GameMode.timeline => const [5, 10, 15],
+      };
+
+  String _targetUnit(GameMode m) => switch (m) {
+        GameMode.year => 'poäng',
+        GameMode.classic => 'frågor',
+        GameMode.timeline => 'kort',
+      };
+
   Future<void> _setHandicap(BuildContext context, GameController controller,
       String playerId, String name, int current) async {
     final value = await showDialog<int>(
@@ -209,23 +227,26 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 if (controller.isHost)
                   Expanded(
                     child: SegmentedButton<GameMode>(
+                      showSelectedIcon: false,
                       segments: const [
                         ButtonSegment(
                             value: GameMode.timeline, label: Text('Tidslinje')),
                         ButtonSegment(
                             value: GameMode.year, label: Text('Årtal')),
+                        ButtonSegment(
+                            value: GameMode.classic, label: Text('Klassisk')),
                       ],
                       selected: {room.mode},
                       onSelectionChanged: (s) => controller.setMode(s.first),
                     ),
                   )
                 else
-                  Text(room.mode == GameMode.year ? 'Årtal' : 'Tidslinje',
+                  Text(_modeLabel(room.mode),
                       style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
             const SizedBox(height: 12),
-            // Vinstmål (kort i tidslinje, poäng i årtal).
+            // Vinstmål (kort i tidslinje, poäng i årtal, antal frågor i klassisk).
             Row(
               children: [
                 const Icon(Icons.flag, size: 18),
@@ -233,22 +254,16 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 Text('Mål:', style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(width: 12),
                 if (controller.isHost)
-                  ...[
-                    for (final n in (room.mode == GameMode.year
-                        ? const [15, 25, 40]
-                        : const [5, 10, 15]))
-                      Padding(
+                  ..._targetOptions(room.mode).map((n) => Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: ChoiceChip(
                           label: Text('$n'),
                           selected: room.targetCards == n,
                           onSelected: (_) => controller.setTargetCards(n),
                         ),
-                      )
-                  ]
+                      ))
                 else
-                  Text(
-                      '${room.targetCards} ${room.mode == GameMode.year ? "poäng" : "kort"}',
+                  Text('${room.targetCards} ${_targetUnit(room.mode)}',
                       style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),

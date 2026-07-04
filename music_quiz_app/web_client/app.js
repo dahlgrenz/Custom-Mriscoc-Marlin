@@ -39,9 +39,14 @@ const state = {
   room: null,
   yearDecade: null, // valt årtionde i årtalsläget
   yearGuess: null, // valt år
+  classicAnswer: null, // mitt svar i klassisk runda
+  lastRound: -1,
   banner: null, // { ok: bool, text }
   error: null,
 };
+
+const PROMPTS = { song: "Vilken låt?", artist: "Vilken artist?", year: "Vilket år?" };
+let classicTicker = null;
 
 // ---- Hjälpare: konvertera Firebase-mappar till ordnade arrayer ----------
 
@@ -181,8 +186,31 @@ async function joinRoom() {
 function subscribeRoom() {
   onValue(ref(db, `rooms/${state.code}`), (snap) => {
     state.room = snap.exists() ? snap.val() : null;
+    // Klassiskt läge: nollställ mitt svar vid ny runda.
+    const round = state.room && state.room.currentRound;
+    if (round && round.roundNumber !== state.lastRound) {
+      state.lastRound = round.roundNumber;
+      state.classicAnswer = null;
+    }
     render();
   });
+}
+
+async function submitClassicAnswer(i) {
+  const room = state.room;
+  const round = room && room.currentRound;
+  if (!round || round.revealed || state.classicAnswer != null) return;
+  if (round.deadlineMs && Date.now() > round.deadlineMs) return;
+  state.classicAnswer = i;
+  render();
+  try {
+    await update(ref(db, `rooms/${state.code}/answers/${state.uid}`), {
+      choice: i,
+      at: Date.now(),
+    });
+  } catch (e) {
+    setError("" + e);
+  }
 }
 
 // Placerar den nu spelande låten på [position] i min tidslinje.
@@ -337,13 +365,69 @@ const esc = (s) =>
 // ---- Rendering ----------------------------------------------------------
 
 function render() {
+  // Stoppa ev. nedräknings-ticker; klassiska vyn startar om den vid behov.
+  if (classicTicker) {
+    clearInterval(classicTicker);
+    classicTicker = null;
+  }
   if (!state.uid) return; // väntar på auth
   if (!state.joined) return renderJoin();
   const room = state.room;
   if (!room) return html(`<div class="center"><div class="spinner"></div></div>`);
   if (room.status === "lobby") return renderLobby(room);
   if (room.status === "finished") return renderFinished(room);
+  if (room.mode === "classic") return renderClassic(room);
   return renderGame(room);
+}
+
+function renderClassic(room) {
+  const round = room.currentRound;
+  if (!round || !round.options || !round.options.length) {
+    html(`<div class="center">Väntar på nästa fråga…</div>`);
+    return;
+  }
+  const totalMs = 15000;
+  const now = Date.now();
+  const remaining = Math.max(0, Math.min(totalMs, (round.deadlineMs || 0) - now));
+  const frac = round.deadlineMs ? remaining / totalMs : 0;
+  const revealed = !!round.revealed;
+  const my = state.classicAnswer;
+
+  const opts = round.options
+    .map((o, i) => {
+      let cls = "opt";
+      if (revealed) {
+        if (i === round.correctIndex) cls += " correct";
+        else if (i === my) cls += " wrong";
+      } else if (i === my) cls += " sel";
+      const dis = revealed || my != null ? "disabled" : "";
+      return `<button class="${cls}" data-opt="${i}" ${dis}>${esc(o)}</button>`;
+    })
+    .join("");
+
+  html(`
+    ${leaderboardHtml(room)}
+    <h2 style="text-align:center">${esc(PROMPTS[round.questionType] || "")}</h2>
+    <p class="muted" style="text-align:center">🔊 Lyssna på värdens telefon · Fråga ${round.roundNumber}/${room.targetCards}</p>
+    ${
+      revealed
+        ? `<p style="text-align:center;color:#7ee2a0">Rätt svar: ${esc(round.options[round.correctIndex])}</p>`
+        : `<div class="timerbar"><div class="fill" style="width:${Math.round(frac * 100)}%"></div></div>
+           <p style="text-align:center">${Math.ceil(remaining / 1000)} s</p>`
+    }
+    <div class="opts">${opts}</div>
+    ${my != null && !revealed ? '<p class="muted" style="text-align:center">Svar registrerat…</p>' : ""}
+    <button class="secondary" id="leave" style="margin-top:24px">Lämna</button>
+  `);
+
+  if (!revealed && my == null) {
+    appEl.querySelectorAll("[data-opt]").forEach((el) => {
+      el.onclick = () => submitClassicAnswer(Number(el.dataset.opt));
+    });
+    // Räkna ned live.
+    classicTicker = setInterval(render, 300);
+  }
+  wireLeave();
 }
 
 function html(s) {
@@ -422,7 +506,7 @@ function leaderboardHtml(room, raw = false) {
   const rows = list
     .map((p, i) => {
       const v = raw ? baseValue(room, p) : rankValue(room, p);
-      const val = room.mode === "year" ? `${v} p` : `${v} kort`;
+      const val = room.mode === "timeline" ? `${v} kort` : `${v} p`;
       const hc =
         !raw && (p.handicap || 0) > 0
           ? `<span class="hc">−${p.handicap}</span>`

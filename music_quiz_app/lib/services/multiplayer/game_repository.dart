@@ -148,6 +148,60 @@ class GameRepository {
     await _room(code).update(updates);
   }
 
+  /// Startar en klassisk match: status playing + sparad lek. Rundorna drivs
+  /// sedan av värden (se GameController). Ingen turordning/startkort behövs.
+  Future<void> startClassicGame({
+    required String code,
+    required List<Track> deck,
+  }) async {
+    await _room(code).update({
+      'status': RoomStatus.playing.name,
+      'deck': {for (var i = 0; i < deck.length; i++) '$i': deck[i].toJson()},
+      'answers': null, // rensa ev. gamla svar
+    });
+  }
+
+  /// En spelare skickar sitt svar (klassiskt läge).
+  Future<void> submitAnswer({
+    required String code,
+    required String playerId,
+    required int choice,
+    required int atMs,
+  }) =>
+      _room(code).child('answers/$playerId').set({'choice': choice, 'at': atMs});
+
+  Future<void> clearAnswers(String code) =>
+      _room(code).child('answers').remove();
+
+  /// Värden läser in alla svar för rundan: {playerId: {choice, at}}.
+  Future<Map<String, ({int choice, int at})>> readAnswers(String code) async {
+    final snap = await _room(code).child('answers').get();
+    if (!snap.exists || snap.value == null) return {};
+    final raw = Map<String, dynamic>.from(snap.value as Map);
+    return {
+      for (final e in raw.entries)
+        '${e.key}': (
+          choice: ((e.value as Map)['choice'] as num?)?.toInt() ?? -1,
+          at: ((e.value as Map)['at'] as num?)?.toInt() ?? 0,
+        ),
+    };
+  }
+
+  /// Värden skriver rundans facit + uppdaterade poäng/sviter/statistik.
+  Future<void> applyClassicScores({
+    required String code,
+    required Map<String, Player> updated,
+    required GameRound revealedRound,
+  }) async {
+    final updates = <String, dynamic>{'currentRound': revealedRound.toJson()};
+    for (final p in updated.values) {
+      updates['players/${p.id}/score'] = p.score;
+      updates['players/${p.id}/streak'] = p.streak;
+      updates['players/${p.id}/stats'] = p.stats.toJson();
+    }
+    await _room(code).update(updates);
+  }
+
   /// Läser den sparade leken för ett rum (tom lista om den inte finns än).
   Future<List<Track>> loadDeck(String code) async {
     final snap = await _room(code).child('deck').get();

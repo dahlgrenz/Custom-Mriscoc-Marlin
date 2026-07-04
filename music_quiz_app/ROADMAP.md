@@ -24,13 +24,15 @@ Spotify).
 
 ---
 
-## Fas 6 — Frågemotor & klassiska lägen ✅
-Grunden för väldigt många lägen nedan.
-- ✅ **Flervalsfrågor (4 alternativ)** — distraktorer (fel svar) genereras ur
-  spellistan: "Vilken låt/artist/album/år?"
-- ✅ **Rondtimer** + **snabbast-svar-poäng**
-- ✅ **Streak / flest rätt i rad**, precision, svarstid
-- ✅ Lägen: **Alla mot alla**, **Eliminering** (fel = ute), **Last Man Standing**
+## Fas 6 — Frågemotor & klassiska lägen ✅ **KLAR**
+Grunden för väldigt många lägen nedan. Implementerat: nytt läge **Klassisk**
+(`GameMode.classic`), värddriven rundloop, samtidiga svar, timer och poäng.
+- ✅ **Flervalsfrågor (4 alternativ)** — distraktorer genereras ur spellistan
+  (`game/question.dart`): "Vilken låt/artist/år?"
+- ✅ **Rondtimer** (15 s) + **snabbast-svar-poäng** (100 + upp till 100 i bonus)
+- ✅ **Streak / flest rätt i rad** (bästa svit sparas som statistik)
+- ⏳ Kvar i denna kategori: Alla mot alla / Eliminering / Last Man Standing som
+  egna varianter ovanpå frågemotorn.
 
 ## Fas 7 — Fler frågetyper ur Spotify-data ✅ / 🟡
 - ✅ **Introtävling** (spela 2–10 s från början via SDK-seek)

@@ -5,8 +5,9 @@ class PlayerStats {
   final int perfect; // fullpott (5 p i årtal, rätt placering i tidslinje)
   final int threes; // 3 p (nära) i årtalsläget
   final int ones; // 1 p ("ettor") i årtalsläget
-  final int misses; // 0 p / fel placering
+  final int misses; // 0 p / fel placering / fel svar
   final int steals; // lyckade stölder (tidslinjeläget)
+  final int bestStreak; // längsta svit av rätt i rad (klassiskt läge)
 
   const PlayerStats({
     this.perfect = 0,
@@ -14,6 +15,7 @@ class PlayerStats {
     this.ones = 0,
     this.misses = 0,
     this.steals = 0,
+    this.bestStreak = 0,
   });
 
   PlayerStats copyWith({
@@ -22,6 +24,7 @@ class PlayerStats {
     int? ones,
     int? misses,
     int? steals,
+    int? bestStreak,
   }) =>
       PlayerStats(
         perfect: perfect ?? this.perfect,
@@ -29,6 +32,7 @@ class PlayerStats {
         ones: ones ?? this.ones,
         misses: misses ?? this.misses,
         steals: steals ?? this.steals,
+        bestStreak: bestStreak ?? this.bestStreak,
       );
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +41,7 @@ class PlayerStats {
         'ones': ones,
         'misses': misses,
         'steals': steals,
+        'bestStreak': bestStreak,
       };
 
   factory PlayerStats.fromJson(Map<String, dynamic>? j) => j == null
@@ -47,6 +52,7 @@ class PlayerStats {
           ones: (j['ones'] as num?)?.toInt() ?? 0,
           misses: (j['misses'] as num?)?.toInt() ?? 0,
           steals: (j['steals'] as num?)?.toInt() ?? 0,
+          bestStreak: (j['bestStreak'] as num?)?.toInt() ?? 0,
         );
 }
 
@@ -64,6 +70,9 @@ class Player {
   /// Minuspoäng som värden gett spelaren (handikapp för en riktigt duktig spelare).
   final int handicap;
 
+  /// Nuvarande svit av rätt i rad (klassiskt läge).
+  final int streak;
+
   final PlayerStats stats;
 
   const Player({
@@ -73,6 +82,7 @@ class Player {
     this.score = 0,
     this.timeline = const [],
     this.handicap = 0,
+    this.streak = 0,
     this.stats = const PlayerStats(),
   });
 
@@ -80,6 +90,7 @@ class Player {
     int? score,
     List<Track>? timeline,
     int? handicap,
+    int? streak,
     PlayerStats? stats,
   }) =>
       Player(
@@ -89,6 +100,7 @@ class Player {
         score: score ?? this.score,
         timeline: timeline ?? this.timeline,
         handicap: handicap ?? this.handicap,
+        streak: streak ?? this.streak,
         stats: stats ?? this.stats,
       );
 
@@ -98,6 +110,7 @@ class Player {
         'avatar': avatar,
         'score': score,
         'handicap': handicap,
+        'streak': streak,
         'stats': stats.toJson(),
         // Firebase gillar map framför list; nyckla på index för stabil ordning.
         'timeline': {
@@ -122,6 +135,7 @@ class Player {
       score: (json['score'] as num?)?.toInt() ?? 0,
       timeline: tracks,
       handicap: (json['handicap'] as num?)?.toInt() ?? 0,
+      streak: (json['streak'] as num?)?.toInt() ?? 0,
       stats: PlayerStats.fromJson(json['stats'] == null
           ? null
           : Map<String, dynamic>.from(json['stats'] as Map)),

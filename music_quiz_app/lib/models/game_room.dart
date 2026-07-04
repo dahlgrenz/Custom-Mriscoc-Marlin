@@ -3,15 +3,18 @@ import 'track.dart';
 
 enum RoomStatus { lobby, playing, finished }
 
-/// Spelläge. [timeline] = placera låten rätt i tiden (Hitster). [year] = gissa
-/// utgivningsåret; poäng efter hur nära (5/3/1).
-enum GameMode { timeline, year }
+/// Spelläge.
+/// - [timeline]: placera låten rätt i tiden (Hitster).
+/// - [year]: gissa utgivningsåret; poäng efter hur nära (5/3/1).
+/// - [classic]: samtidig flervalsfråga med timer och snabbast-svar-poäng.
+enum GameMode { timeline, year, classic }
 
 /// Rundans fas: den aktiva spelaren gissar först; om hen har fel får en
 /// utmanare (nästa spelare) chansen att stjäla kortet.
 enum RoundPhase { guessing, stealing }
 
-/// Den nuvarande rundan: vilken låt som spelas och vems tur det är.
+/// Den nuvarande rundan. I tidslinje-/årtalsläget beskriver den vems tur det är;
+/// i klassiskt läge bär den även frågan (typ, alternativ, deadline).
 class GameRound {
   final Track track;
   final String activePlayerId;
@@ -20,32 +23,71 @@ class GameRound {
   /// Vem som får stjäla när [phase] är [RoundPhase.stealing] (annars null).
   final String? stealerId;
 
+  // --- Klassiskt läge ---
+  /// Frågetyp: "song" | "artist" | "year" (tomt i övriga lägen).
+  final String questionType;
+  final List<String> options;
+
+  /// Rätt alternativ. Döljs (−1) tills [revealed] är true, för att minska fusk.
+  final int correctIndex;
+
+  /// Svarsdeadline i epok-millisekunder (0 = ej satt).
+  final int deadlineMs;
+  final bool revealed;
+  final int roundNumber;
+
   const GameRound({
     required this.track,
-    required this.activePlayerId,
+    this.activePlayerId = '',
     this.phase = RoundPhase.guessing,
     this.stealerId,
+    this.questionType = '',
+    this.options = const [],
+    this.correctIndex = -1,
+    this.deadlineMs = 0,
+    this.revealed = false,
+    this.roundNumber = 0,
   });
 
   /// Vem som får agera just nu (gissaren eller utmanaren).
   String get actorId =>
       phase == RoundPhase.stealing ? (stealerId ?? activePlayerId) : activePlayerId;
 
+  /// Frågetext för klassiskt läge.
+  String get promptText => switch (questionType) {
+        'artist' => 'Vilken artist?',
+        'year' => 'Vilket år?',
+        'song' => 'Vilken låt?',
+        _ => '',
+      };
+
   Map<String, dynamic> toJson() => {
         'track': track.toJson(),
         'activePlayerId': activePlayerId,
         'phase': phase.name,
         'stealerId': stealerId,
+        if (questionType.isNotEmpty) 'questionType': questionType,
+        if (options.isNotEmpty) 'options': options,
+        'correctIndex': correctIndex,
+        if (deadlineMs > 0) 'deadlineMs': deadlineMs,
+        'revealed': revealed,
+        'roundNumber': roundNumber,
       };
 
   factory GameRound.fromJson(Map<String, dynamic> json) => GameRound(
         track: Track.fromJson(Map<String, dynamic>.from(json['track'] as Map)),
-        activePlayerId: json['activePlayerId'] as String,
+        activePlayerId: json['activePlayerId'] as String? ?? '',
         phase: RoundPhase.values.firstWhere(
           (p) => p.name == json['phase'],
           orElse: () => RoundPhase.guessing,
         ),
         stealerId: json['stealerId'] as String?,
+        questionType: json['questionType'] as String? ?? '',
+        options: [for (final o in (json['options'] as List? ?? [])) '$o'],
+        correctIndex: (json['correctIndex'] as num?)?.toInt() ?? -1,
+        deadlineMs: (json['deadlineMs'] as num?)?.toInt() ?? 0,
+        revealed: json['revealed'] as bool? ?? false,
+        roundNumber: (json['roundNumber'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -82,9 +124,9 @@ class GameRoom {
   String? get activePlayerId =>
       turnOrder.isEmpty ? null : turnOrder[turnIndex % turnOrder.length];
 
-  /// Grundvärde utan handikapp: poäng i årtalsläge, annars antal kort.
+  /// Grundvärde utan handikapp: antal kort i tidslinjeläge, annars poäng.
   int baseValue(Player p) =>
-      mode == GameMode.year ? p.score : p.timeline.length;
+      mode == GameMode.timeline ? p.timeline.length : p.score;
 
   /// Rankvärde med handikapp (minuspoäng) inräknat — det som avgör placeringen.
   int rankValue(Player p) => baseValue(p) - p.handicap;
